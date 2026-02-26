@@ -1,6 +1,7 @@
 name: OpenClaw GitHub Bridge
 
 on:
+  workflow_dispatch:
   issues:
     types: [opened, edited]
   issue_comment:
@@ -14,38 +15,57 @@ on:
 
 jobs:
   notify-openclaw:
+    # Always forward issue/PR lifecycle events.
+    # For comment events, only forward when bot is mentioned.
     if: >-
-      github.event_name == 'pull_request' ||
       github.event_name == 'issues' ||
-      contains(toJson(github.event), '@Moltleadbot') ||
-      contains(toJson(github.event), '@moltleadbot')
+      github.event_name == 'pull_request' ||
+      (
+        (github.event_name == 'issue_comment' || github.event_name == 'pull_request_review_comment' || github.event_name == 'commit_comment') &&
+        (contains(github.event.comment.body, '@Moltleadbot') || contains(github.event.comment.body, '@moltleadbot'))
+      )
     runs-on: ubuntu-latest
+
     steps:
-      - name: Build message
-        id: msg
+      - name: Build payload JSON
         shell: bash
         run: |
-          REPO="${{ github.repository }}"
-          EVENT="${{ github.event_name }}"
-          ACTOR="${{ github.actor }}"
-          URL="${{ github.event.issue.html_url || github.event.pull_request.html_url || github.event.comment.html_url || github.event.repository.html_url }}"
-          TITLE="${{ github.event.issue.title || github.event.pull_request.title || 'GitHub event' }}"
-          BODY="${{ github.event.comment.body || github.event.issue.body || github.event.pull_request.body || '' }}"
+          python3 - <<'PY'
+          import json, os
 
-          BODY_TRIMMED=$(echo "$BODY" | head -c 1200)
+          event_name = os.environ.get('GITHUB_EVENT_NAME', 'unknown')
+          actor = os.environ.get('GITHUB_ACTOR', 'unknown')
+          repo = os.environ.get('GITHUB_REPOSITORY', 'unknown')
+          event_path = os.environ.get('GITHUB_EVENT_PATH')
 
-          cat <<EOF > payload.json
-          {
-            "name": "GitHub",
-            "message": "[${EVENT}] ${REPO} by @${ACTOR}\nTitle: ${TITLE}\nURL: ${URL}\n\nContent:\n${BODY_TRIMMED}",
-            "deliver": true,
-            "channel": "telegram",
-            "to": "telegram:-1003257445528",
-            "wakeMode": "now"
+          with open(event_path, 'r', encoding='utf-8') as f:
+            ev = json.load(f)
+
+          issue = ev.get('issue') or {}
+          pr = ev.get('pull_request') or {}
+          comment = ev.get('comment') or {}
+          repository = ev.get('repository') or {}
+
+          title = issue.get('title') or pr.get('title') or 'GitHub event'
+          url = issue.get('html_url') or pr.get('html_url') or comment.get('html_url') or repository.get('html_url') or ''
+          body = comment.get('body') or issue.get('body') or pr.get('body') or ''
+          body = (body or '')[:1200]
+
+          payload = {
+            'name': 'GitHub',
+            'message': f'[{event_name}] {repo} by @{actor}\nTitle: {title}\nURL: {url}\n\nContent:\n{body}',
+            'deliver': True,
+            'channel': 'telegram',
+            'to': 'telegram:-1003257445528',
+            'wakeMode': 'now'
           }
-          EOF
 
-          echo "payload=payload.json" >> "$GITHUB_OUTPUT"
+          with open('payload.json', 'w', encoding='utf-8') as f:
+            json.dump(payload, f)
+          PY
+
+          echo "Payload built"
+          cat payload.json
 
       - name: Send to OpenClaw hook
         env:
@@ -55,7 +75,9 @@ jobs:
           test -n "$OPENCLAW_HOOK_URL"
           test -n "$OPENCLAW_HOOK_TOKEN"
 
-          curl -sS -X POST "$OPENCLAW_HOOK_URL" \
+          curl -f -sS -X POST "$OPENCLAW_HOOK_URL" \
             -H "Authorization: Bearer $OPENCLAW_HOOK_TOKEN" \
             -H "Content-Type: application/json" \
-            --data @"${{ steps.msg.outputs.payload }}"
+            --data @payload.json
+
+          echo "OpenClaw webhook delivered"
