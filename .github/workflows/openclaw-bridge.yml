@@ -1,0 +1,61 @@
+name: OpenClaw GitHub Bridge
+
+on:
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created, edited]
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+  commit_comment:
+    types: [created]
+
+jobs:
+  notify-openclaw:
+    if: >-
+      github.event_name == 'pull_request' ||
+      github.event_name == 'issues' ||
+      contains(toJson(github.event), '@Moltleadbot') ||
+      contains(toJson(github.event), '@moltleadbot')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build message
+        id: msg
+        shell: bash
+        run: |
+          REPO="${{ github.repository }}"
+          EVENT="${{ github.event_name }}"
+          ACTOR="${{ github.actor }}"
+          URL="${{ github.event.issue.html_url || github.event.pull_request.html_url || github.event.comment.html_url || github.event.repository.html_url }}"
+          TITLE="${{ github.event.issue.title || github.event.pull_request.title || 'GitHub event' }}"
+          BODY="${{ github.event.comment.body || github.event.issue.body || github.event.pull_request.body || '' }}"
+
+          BODY_TRIMMED=$(echo "$BODY" | head -c 1200)
+
+          cat <<EOF > payload.json
+          {
+            "name": "GitHub",
+            "message": "[${EVENT}] ${REPO} by @${ACTOR}\nTitle: ${TITLE}\nURL: ${URL}\n\nContent:\n${BODY_TRIMMED}",
+            "deliver": true,
+            "channel": "telegram",
+            "to": "telegram:-1003257445528",
+            "wakeMode": "now"
+          }
+          EOF
+
+          echo "payload=payload.json" >> "$GITHUB_OUTPUT"
+
+      - name: Send to OpenClaw hook
+        env:
+          OPENCLAW_HOOK_URL: ${{ secrets.OPENCLAW_HOOK_URL }}
+          OPENCLAW_HOOK_TOKEN: ${{ secrets.OPENCLAW_HOOK_TOKEN }}
+        run: |
+          test -n "$OPENCLAW_HOOK_URL"
+          test -n "$OPENCLAW_HOOK_TOKEN"
+
+          curl -sS -X POST "$OPENCLAW_HOOK_URL" \
+            -H "Authorization: Bearer $OPENCLAW_HOOK_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data @"${{ steps.msg.outputs.payload }}"

@@ -28,3 +28,12 @@ uvicorn apps.api.app.main:app --reload --port 8000
 - Health endpoints
 - Local infra compose
 - Python packaging baseline
+
+## GitHub → OpenClaw bridge (optional)
+
+Workflow file: `.github/workflows/openclaw-bridge.yml`
+
+Required repository secrets:
+
+- `OPENCLAW_HOOK_URL` (example: `https://<public-domain>/hooks/agent`)
+- `OPENCLAW_HOOK_TOKEN` (matches `hooks.token` in OpenClaw config)
