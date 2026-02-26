@@ -11,6 +11,11 @@ on:
   pull_request_review_comment:
     types: [created, edited]
 
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
 jobs:
   notify-openclaw:
     # Always forward issue/PR lifecycle events.
@@ -66,9 +71,6 @@ jobs:
             json.dump(payload, f)
           PY
 
-          echo "Payload built"
-          cat payload.json
-
       - name: Send to OpenClaw hook
         env:
           OPENCLAW_HOOK_URL: ${{ secrets.OPENCLAW_HOOK_URL }}
@@ -82,4 +84,18 @@ jobs:
             -H "Content-Type: application/json" \
             --data @payload.json
 
-          echo "OpenClaw webhook delivered"
+      - name: Comment back in GitHub thread
+        if: github.event_name == 'issue_comment' || github.event_name == 'pull_request_review_comment'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_URL: ${{ github.event.comment.html_url }}
+        run: |
+          BODY="✅ Nhận được mention, mình đã chuyển request sang OpenClaw (Telegram bridge).\n\nRef: $COMMENT_URL"
+          jq -n --arg body "$BODY" '{body:$body}' > gh_comment.json
+          curl -f -sS -X POST "https://api.github.com/repos/$REPO/issues/$ISSUE_NUMBER/comments" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Content-Type: application/json" \
+            --data @gh_comment.json
