@@ -14,13 +14,33 @@ Backend monorepo for Sentient Finance.
 
 ## Quickstart
 
+### Windows (PowerShell)
+
+```powershell
+Copy-Item .env.example .env -ErrorAction SilentlyContinue
+.\scripts\bootstrap.ps1
+.\.venv\Scripts\activate
+.\scripts\dev.ps1
+```
+
+### Git Bash / Linux / macOS
+
 ```bash
 cp .env.example .env
-docker compose -f infra/docker-compose.yml up -d
-python -m venv .venv && source .venv/bin/activate
-pip install -e .
-uvicorn apps.api.app.main:app --reload --port 8000
+./scripts/bootstrap.sh
+source .venv/Scripts/activate  # Windows Git Bash
+./scripts/dev.sh
 ```
+
+### Optional: Makefile (if you have `make`)
+
+```bash
+make help
+```
+
+## CI
+
+![CI](https://github.com/sentient-finance/sentient-backend/actions/workflows/openclaw-bridge.yml/badge.svg)
 
 ## Day 1 Scope
 
