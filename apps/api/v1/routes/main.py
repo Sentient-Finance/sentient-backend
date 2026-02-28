@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Request
 
-from apps.api.v1.routes.vaults import router as vault_router
+from apps.api.v1.routes.vaults import vault_router, vaults_router
 from libs.core.config import Settings
 
 router = APIRouter(tags=["meta"])
@@ -20,5 +20,6 @@ def ready(settings: Settings = Depends(get_settings_from_request)):
     return {"ok": True, "service": "api", "ready": True}
 
 
+router.include_router(vaults_router)
 router.include_router(vault_router)
 

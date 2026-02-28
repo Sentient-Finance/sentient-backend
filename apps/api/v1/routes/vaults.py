@@ -11,7 +11,8 @@ from sqlalchemy.orm import Session
 from libs.db.models import Vault, VaultEvent
 from libs.db.session import get_db
 
-router = APIRouter(prefix="/vaults", tags=["vaults"])
+vaults_router = APIRouter(prefix="/vaults", tags=["vaults"])
+vault_router = APIRouter(prefix="/vault", tags=["vault"])
 
 T = TypeVar("T")
 
@@ -81,7 +82,7 @@ def address_param() -> str:
     return Path(..., pattern=r"^0x[a-fA-F0-9]{40}$", description="Vault address")
 
 
-@router.get("", response_model=PaginatedResponse[VaultListItem])
+@vaults_router.get("", response_model=PaginatedResponse[VaultListItem])
 def list_vaults(
     chain_id: int | None = Query(default=None, alias="chain"),
     limit: int = Query(default=20, ge=1, le=100),
@@ -119,7 +120,7 @@ def list_vaults(
     )
 
 
-@router.get("/{address}/history", response_model=PaginatedResponse[HistoryItem])
+@vault_router.get("/{address}/history", response_model=PaginatedResponse[HistoryItem])
 def get_vault_history(
     address: str = address_param(),
     chain_id: int | None = Query(default=None, alias="chain"),
@@ -183,7 +184,7 @@ def get_vault_history(
     )
 
 
-@router.get("/{address}", response_model=VaultDetail)
+@vault_router.get("/{address}", response_model=VaultDetail)
 def get_vault(
     address: str = address_param(),
     chain_id: int | None = Query(default=None, alias="chain"),
