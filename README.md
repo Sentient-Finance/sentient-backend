@@ -12,14 +12,25 @@ Backend monorepo for Sentient Finance.
 - `libs/db` - DB models and persistence
 - `infra` - Local infra (Postgres/Redis)
 
-## Quickstart
+## Quickstart (local Python)
 
 ```bash
 cp .env.example .env
-docker compose -f infra/docker-compose.yml up -d
+docker compose -f infra/docker-compose.yml up -d postgres redis
 python -m venv .venv && source .venv/bin/activate
 pip install -e .
 uvicorn apps.api.app.main:app --reload --port 8000
+```
+
+## Quickstart (Docker runtime)
+
+```bash
+# API + worker + infra
+cd infra
+docker compose --profile runtime up -d --build
+
+# Optional: indexer (requires INDEXER_RPC_URL + INDEXER_CONTRACTS in env)
+docker compose --profile indexer up -d --build
 ```
 
 ## Day 1 Scope

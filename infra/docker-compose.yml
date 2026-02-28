@@ -9,11 +9,76 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentient -d sentient"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   redis:
     image: redis:7
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    profiles: ["runtime"]
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    command: uvicorn apps.api.app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      DATABASE_URL: postgresql+psycopg://sentient:sentient@postgres:5432/sentient
+      REDIS_URL: redis://redis:6379/0
+      APP_ENV: dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  worker:
+    profiles: ["runtime"]
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    command: python -m apps.worker.main
+    environment:
+      DATABASE_URL: postgresql+psycopg://sentient:sentient@postgres:5432/sentient
+      REDIS_URL: redis://redis:6379/0
+      APP_ENV: dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  indexer:
+    profiles: ["indexer"]
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    command: python -m apps.indexer.main
+    environment:
+      DATABASE_URL: postgresql+psycopg://sentient:sentient@postgres:5432/sentient
+      REDIS_URL: redis://redis:6379/0
+      INDEXER_RPC_URL: ${INDEXER_RPC_URL:-}
+      INDEXER_CHAIN_ID: ${INDEXER_CHAIN_ID:-84532}
+      INDEXER_CONTRACTS: ${INDEXER_CONTRACTS:-}
+      INDEXER_START_BLOCK: ${INDEXER_START_BLOCK:-0}
+      INDEXER_CONFIRMATIONS: ${INDEXER_CONFIRMATIONS:-2}
+      INDEXER_POLL_INTERVAL_SEC: ${INDEXER_POLL_INTERVAL_SEC:-12}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
 volumes:
   pgdata:
