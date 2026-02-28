@@ -1,56 +1,146 @@
 # sentient-backend
 
-Backend monorepo for Sentient Finance.
+Backend monorepo for Sentient Finance — hybrid architecture:
 
-## Structure
+- **The Graph** for read / event-history queries
+- **FastAPI + Celery worker** for write / action + CRE execution
 
-- `apps/api` - FastAPI public/internal API
-- `apps/indexer` - On-chain event indexer
-- `apps/worker` - Strategy + execution workers
-- `libs/core` - Domain logic
-- `libs/chain` - Web3/contract clients
-- `libs/db` - DB models and persistence
-- `infra` - Local infra (Postgres/Redis)
+## Repository layout
 
-## Quickstart
+```
+apps/
+  api/          FastAPI public + internal API
+  indexer/      On-chain event indexer (poll loop)
+  worker/       Celery strategy + execution workers
+libs/
+  core/         Settings, shared utilities
+  chain/        Web3 / contract clients
+  db/           SQLAlchemy models, session factory
+infra/
+  docker-compose.yml   Local Postgres 16 + Redis 7
+alembic/        Database migrations
+scripts/        Bootstrap + dev helpers
+```
+
+## Quickstart — 3 steps
+
+### Git Bash / Linux / macOS
 
 ```bash
-cp .env.example .env
+# 1. Bootstrap (copies .env, starts docker, installs venv)
+cp .env.example .env && ./scripts/bootstrap.sh
+
+# 2. Activate venv
+source .venv/Scripts/activate   # Windows Git Bash
+# source .venv/bin/activate     # Linux / macOS
+
+# 3. Start API
+uvicorn apps.api.app.main:app --reload
+```
+
+Then open: <http://localhost:8000/health>
+
+### Windows (PowerShell)
+
+```powershell
+# 1. Bootstrap
+Copy-Item .env.example .env -ErrorAction SilentlyContinue; .\scripts\bootstrap.ps1
+
+# 2. Activate venv
+.\.venv\Scripts\Activate.ps1
+
+# 3. Start API
+uvicorn apps.api.app.main:app --reload
+```
+
+### Makefile shorthand (requires `make`)
+
+```bash
+make db-up    # step 1 — start infra only
+make install  # install deps into venv
+make dev      # step 3 — uvicorn with reload
+```
+
+Run `make help` to see all targets.
+
+## Local runbook
+
+### Infrastructure
+
+```bash
+# Start Postgres 16 + Redis 7
 docker compose -f infra/docker-compose.yml up -d
-python -m venv .venv && source .venv/bin/activate
-pip install -e .
-uvicorn apps.api.app.main:app --reload --port 8000
+
+# Stop (keeps volumes)
+docker compose -f infra/docker-compose.yml down
+
+# Destroy including data
+docker compose -f infra/docker-compose.yml down -v
 ```
 
-## Day 1 Scope
+Wait ~5 s for Postgres to become healthy before running migrations.
 
-- Project scaffold
-- Health endpoints
-- Local infra compose
-- Python packaging baseline
-
-## Indexer (Issue #3) quick run
-
-Set env:
+### Database migrations
 
 ```bash
-export INDEXER_RPC_URL="https://base-sepolia.g.alchemy.com/v2/<key>"
-export INDEXER_CHAIN_ID=84532
-export INDEXER_CONTRACTS="0xYourVaultFactory,0xYourVault"
-export INDEXER_START_BLOCK=0
+# Apply all pending migrations
+make migrate           # or: python -m alembic upgrade head
+
+# Create a new migration (autogenerate from models)
+make revision MSG="add users table"
+
+# Roll back one step
+make downgrade
 ```
 
-Run once:
+### Running services
+
+| Service | Command                                                              |
+| ------- | -------------------------------------------------------------------- |
+| API     | `uvicorn apps.api.app.main:app --reload`                             |
+| Worker  | `celery -A apps.worker.celery_app.celery_app worker --loglevel=info` |
+| Indexer | `python -m apps.indexer.main`                                        |
+
+Or via Makefile: `make dev`, `make worker`, `make indexer`.
+
+### Health endpoints
+
+| Endpoint         | Description                          |
+| ---------------- | ------------------------------------ |
+| `GET /health`    | Root health (load-balancer friendly) |
+| `GET /v1/health` | API v1 health                        |
+| `GET /v1/ready`  | Readiness probe                      |
+
+### Tests
 
 ```bash
-python -m apps.indexer.main --once
+make test         # or: pytest
 ```
 
-## GitHub → OpenClaw bridge (optional)
+### Lint / format
 
-Workflow file: `.github/workflows/openclaw-bridge.yml`
+```bash
+make lint         # ruff check
+make fix          # ruff check --fix
+make format       # black .
+```
 
-Required repository secrets:
+## Environment variables
 
-- `OPENCLAW_HOOK_URL` (example: `https://<public-domain>/hooks/agent`)
-- `OPENCLAW_HOOK_TOKEN` (matches `hooks.token` in OpenClaw config)
+Copy `.env.example` to `.env` and adjust as needed.
+
+| Variable        | Default                    | Description                  |
+| --------------- | -------------------------- | ---------------------------- |
+| `APP_ENV`       | `dev`                      | Environment name             |
+| `APP_PORT`      | `8000`                     | API port                     |
+| `POSTGRES_HOST` | `127.0.0.1`                | Postgres host                |
+| `POSTGRES_DB`   | `sentient`                 | Database name                |
+| `REDIS_URL`     | `redis://127.0.0.1:6379/0` | Redis DSN (broker + backend) |
+| `ETH_RPC_URL`   | —                          | Ethereum JSON-RPC endpoint   |
+| `DATABASE_URL`  | —                          | Full DSN override (optional) |
+
+## CI
+
+Workflow: `.github/workflows/openclaw-bridge.yml`
+
+Required secrets: `OPENCLAW_HOOK_URL`, `OPENCLAW_HOOK_TOKEN`

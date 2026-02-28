@@ -1,13 +1,33 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
-app = FastAPI(title="sentient-backend-api", version="0.1.0")
+from apps.api.v1.routes.main import router as v1_router
+from libs.core.config import get_settings
 
 
-@app.get("/health")
-def health():
-    return {"ok": True, "service": "api"}
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.settings = get_settings()
+    yield
 
 
-@app.get("/ready")
-def ready():
-    return {"ok": True, "service": "api", "ready": True}
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title="sentient-backend-api",
+        version="0.1.0",
+        lifespan=lifespan,
+    )
+
+    # Root-level health — useful for load-balancer / Docker healthchecks
+    @app.get("/health", tags=["meta"])
+    def health_root():
+        return {"ok": True, "service": "api"}
+
+    app.include_router(v1_router, prefix="/v1")
+
+    return app
+
+
+app = create_app()
+
