@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, Request
 
 from libs.core.config import Settings
 
-
 router = APIRouter(tags=["meta"])
 
 
