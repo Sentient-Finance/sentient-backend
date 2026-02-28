@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
@@ -14,6 +14,26 @@ from libs.db.session import get_db
 router = APIRouter(prefix="/vault", tags=["vaults"])
 
 T = TypeVar("T")
+
+# Keep aligned with sentient-vault-solidity contract event names.
+VaultEventType = Literal[
+    "VaultInitialized",
+    "TokenRuleSet",
+    "TokenDeposited",
+    "TokenWithdrawn",
+    "SwapExecuted",
+    "RouterUpdated",
+    "AuthorizedExecutorUpdated",
+    "ExecutorUpdated",
+    "MaxTradeAmountUpdated",
+    "CooldownPeriodUpdated",
+    "PriceFeedUpdated",
+    "OwnershipTransferred",
+    "MaxSlippageUpdated",
+    "CrossChainShieldTriggered",
+    "CCIPRouterUpdated",
+    "AutomationConfigUpdated",
+]
 
 
 class PaginatedResponse(BaseModel, Generic[T]):
@@ -150,7 +170,7 @@ def get_vault(
 def get_vault_history(
     address: str = address_param(),
     chain_id: int | None = Query(default=None, alias="chain"),
-    event_type: str | None = Query(default=None, alias="type"),
+    event_type: VaultEventType | None = Query(default=None, alias="type"),
     from_time: datetime | None = Query(default=None, alias="from"),
     to_time: datetime | None = Query(default=None, alias="to"),
     limit: int = Query(default=50, ge=1, le=200),
