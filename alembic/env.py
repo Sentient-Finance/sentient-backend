@@ -8,9 +8,7 @@ from sqlalchemy import engine_from_config, pool
 
 from libs.core.config import get_settings
 from libs.db.base import Base  # noqa: F401 — registers model metadata
-
-# Import model modules here so their tables appear in Base.metadata:
-# from libs.db import models  # example
+from libs.db import models  # noqa: F401 - ensure table metadata is loaded
 
 config = context.config
 

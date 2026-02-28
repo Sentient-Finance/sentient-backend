@@ -109,6 +109,9 @@ Or via Makefile: `make dev`, `make worker`, `make indexer`.
 | `GET /health` | Root health (load-balancer friendly) |
 | `GET /v1/health` | API v1 health |
 | `GET /v1/ready` | Readiness probe |
+| `GET /v1/vaults` | Vault list (pagination + chain filter) |
+| `GET /v1/vault/{address}` | Vault detail |
+| `GET /v1/vault/{address}/history` | Vault event history (type/from/to filters) |
 
 ### Tests
 
