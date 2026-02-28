@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 from logging.config import fileConfig
-from typing import Any
+
+from sqlalchemy import create_engine, pool
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
-
 from libs.core.config import get_settings
-from libs.db.base import Base  # noqa: F401 — registers model metadata
-from libs.db import models  # noqa: F401 - ensure table metadata is loaded
+from libs.db import models
+from libs.db.base import Base
 
 config = context.config
 
@@ -38,11 +37,9 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
+    connectable = create_engine(
+        get_url(),
         poolclass=pool.NullPool,
-        url=get_url(),
     )
 
     with connectable.connect() as connection:
