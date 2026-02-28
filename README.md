@@ -125,6 +125,13 @@ make fix          # ruff check --fix
 make format       # black .
 ```
 
+### Pre-commit formatting (Husky)
+
+If Node tooling is installed (`npm install`), pre-commit will run:
+
+- Python files (`*.py`): `ruff format` + `ruff check --fix` (via `.venv` python)
+- Docs/config files (`*.md`, `*.json`, `*.yml`, `*.yaml`): `prettier --write`
+
 ## Environment variables
 
 Copy `.env.example` to `.env` and adjust as needed.

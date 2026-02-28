@@ -14,6 +14,9 @@
     "prettier": "^3.5.3"
   },
   "lint-staged": {
+    "*.py": [
+      "bash -lc 'if [ -x .venv/bin/python ]; then .venv/bin/python -m ruff format \"$@\" && .venv/bin/python -m ruff check --fix \"$@\"; elif [ -x .venv/Scripts/python.exe ]; then .venv/Scripts/python.exe -m ruff format \"$@\" && .venv/Scripts/python.exe -m ruff check --fix \"$@\"; else echo \"[husky] Missing .venv Python. Run bootstrap/install first.\"; exit 1; fi' --"
+    ],
     "*.{md,json,yml,yaml}": [
       "prettier --write"
     ]
