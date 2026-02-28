@@ -24,7 +24,7 @@ def create_app() -> FastAPI:
     def health_root():
         return {"ok": True, "service": "api"}
 
-    app.include_router(v1_router, prefix="/v1")
+    app.include_router(v1_router, prefix="/api/v1")
 
     return app
 
