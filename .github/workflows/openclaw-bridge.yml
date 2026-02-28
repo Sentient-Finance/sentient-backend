@@ -58,12 +58,17 @@ jobs:
           body = comment.get('body') or issue.get('body') or pr.get('body') or ''
           body = (body or '')[:1200]
 
+          telegram_target = os.environ.get(
+            'OPENCLAW_TELEGRAM_TARGET',
+            'telegram:-1003257445528:topic:1',
+          )
+
           payload = {
             'name': 'GitHub',
             'message': f'[{event_name}] {repo} by @{actor}\nTitle: {title}\nURL: {url}\n\nContent:\n{body}',
             'deliver': True,
             'channel': 'telegram',
-            'to': 'telegram:-1003257445528',
+            'to': telegram_target,
             'wakeMode': 'now'
           }
 
