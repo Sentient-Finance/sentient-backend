@@ -1,6 +1,7 @@
 # sentient-backend
 
 Backend monorepo for Sentient Finance — hybrid architecture:
+
 - **The Graph** for read / event-history queries
 - **FastAPI + Celery worker** for write / action + CRE execution
 
@@ -94,21 +95,21 @@ make downgrade
 
 ### Running services
 
-| Service | Command |
-|---------|---------|
-| API | `uvicorn apps.api.app.main:app --reload` |
-| Worker | `celery -A apps.worker.celery_app.celery_app worker --loglevel=info` |
-| Indexer | `python -m apps.indexer.main` |
+| Service | Command                                                              |
+| ------- | -------------------------------------------------------------------- |
+| API     | `uvicorn apps.api.app.main:app --reload`                             |
+| Worker  | `celery -A apps.worker.celery_app.celery_app worker --loglevel=info` |
+| Indexer | `python -m apps.indexer.main`                                        |
 
 Or via Makefile: `make dev`, `make worker`, `make indexer`.
 
 ### Health endpoints
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /health` | Root health (load-balancer friendly) |
-| `GET /v1/health` | API v1 health |
-| `GET /v1/ready` | Readiness probe |
+| Endpoint         | Description                          |
+| ---------------- | ------------------------------------ |
+| `GET /health`    | Root health (load-balancer friendly) |
+| `GET /v1/health` | API v1 health                        |
+| `GET /v1/ready`  | Readiness probe                      |
 
 ### Tests
 
@@ -128,15 +129,15 @@ make format       # black .
 
 Copy `.env.example` to `.env` and adjust as needed.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `APP_ENV` | `dev` | Environment name |
-| `APP_PORT` | `8000` | API port |
-| `POSTGRES_HOST` | `127.0.0.1` | Postgres host |
-| `POSTGRES_DB` | `sentient` | Database name |
-| `REDIS_URL` | `redis://127.0.0.1:6379/0` | Redis DSN (broker + backend) |
-| `ETH_RPC_URL` | — | Ethereum JSON-RPC endpoint |
-| `DATABASE_URL` | — | Full DSN override (optional) |
+| Variable        | Default                    | Description                  |
+| --------------- | -------------------------- | ---------------------------- |
+| `APP_ENV`       | `dev`                      | Environment name             |
+| `APP_PORT`      | `8000`                     | API port                     |
+| `POSTGRES_HOST` | `127.0.0.1`                | Postgres host                |
+| `POSTGRES_DB`   | `sentient`                 | Database name                |
+| `REDIS_URL`     | `redis://127.0.0.1:6379/0` | Redis DSN (broker + backend) |
+| `ETH_RPC_URL`   | —                          | Ethereum JSON-RPC endpoint   |
+| `DATABASE_URL`  | —                          | Full DSN override (optional) |
 
 ## CI
 

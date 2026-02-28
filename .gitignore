@@ -227,3 +227,6 @@ Thumbs.db
 # IDE settings
 .vscode/
 .idea/
+
+# Node tooling (husky/prettier)
+node_modules/

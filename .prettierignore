@@ -1,0 +1,15 @@
+# Python virtual env / caches
+.venv/
+__pycache__/
+
+# Build / tooling artifacts
+node_modules/
+package-lock.json
+
+# Python lock/cache files
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Ignore generated Alembic versions if needed (keep tracked files formatted manually)
+# alembic/versions/

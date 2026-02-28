@@ -6,11 +6,11 @@ services:
       POSTGRES_USER: sentient
       POSTGRES_PASSWORD: sentient
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sentient -d sentient"]
+      test: ['CMD-SHELL', 'pg_isready -U sentient -d sentient']
       interval: 5s
       timeout: 5s
       retries: 10
@@ -18,9 +18,9 @@ services:
   redis:
     image: redis:7
     ports:
-      - "6379:6379"
+      - '6379:6379'
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 3s
       retries: 10
