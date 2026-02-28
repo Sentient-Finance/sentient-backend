@@ -29,6 +29,23 @@ uvicorn apps.api.app.main:app --reload --port 8000
 - Local infra compose
 - Python packaging baseline
 
+## Indexer (Issue #3) quick run
+
+Set env:
+
+```bash
+export INDEXER_RPC_URL="https://base-sepolia.g.alchemy.com/v2/<key>"
+export INDEXER_CHAIN_ID=84532
+export INDEXER_CONTRACTS="0xYourVaultFactory,0xYourVault"
+export INDEXER_START_BLOCK=0
+```
+
+Run once:
+
+```bash
+python -m apps.indexer.main --once
+```
+
 ## GitHub → OpenClaw bridge (optional)
 
 Workflow file: `.github/workflows/openclaw-bridge.yml`
