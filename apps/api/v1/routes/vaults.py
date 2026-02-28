@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from libs.db.models import Vault, VaultEvent
 from libs.db.session import get_db
 
-router = APIRouter(prefix="/vault", tags=["vaults"])
+router = APIRouter(prefix="/vaults", tags=["vaults"])
 
 T = TypeVar("T")
 
@@ -81,7 +81,7 @@ def address_param() -> str:
     return Path(..., pattern=r"^0x[a-fA-F0-9]{40}$", description="Vault address")
 
 
-@router.get("s", response_model=PaginatedResponse[VaultListItem])
+@router.get("", response_model=PaginatedResponse[VaultListItem])
 def list_vaults(
     chain_id: int | None = Query(default=None, alias="chain"),
     limit: int = Query(default=20, ge=1, le=100),
@@ -119,53 +119,6 @@ def list_vaults(
     )
 
 
-@router.get("/{address}", response_model=VaultDetail)
-def get_vault(
-    address: str = address_param(),
-    chain_id: int | None = Query(default=None, alias="chain"),
-    db: Session = Depends(get_db),
-):
-    normalized = normalize_address(address)
-
-    stmt = select(Vault).where(Vault.address == normalized)
-    if chain_id is not None:
-        stmt = stmt.where(Vault.chain_id == chain_id)
-
-    vault = db.scalar(stmt.order_by(Vault.id.desc()))
-    if vault is None:
-        raise HTTPException(status_code=404, detail="vault not found")
-
-    event_count = db.scalar(
-        select(func.count())
-        .select_from(VaultEvent)
-        .where(
-            VaultEvent.vault_address == normalized,
-            VaultEvent.chain_id == vault.chain_id,
-        )
-    ) or 0
-
-    latest_event = db.scalar(
-        select(VaultEvent)
-        .where(
-            VaultEvent.vault_address == normalized,
-            VaultEvent.chain_id == vault.chain_id,
-        )
-        .order_by(VaultEvent.block_number.desc(), VaultEvent.log_index.desc())
-        .limit(1)
-    )
-
-    return VaultDetail(
-        chain_id=vault.chain_id,
-        address=vault.address,
-        created_block_number=vault.created_block_number,
-        created_tx_hash=vault.created_tx_hash,
-        created_timestamp=vault.created_timestamp,
-        event_count=event_count,
-        latest_event_block=latest_event.block_number if latest_event else None,
-        latest_event_timestamp=latest_event.timestamp if latest_event else None,
-    )
-
-
 @router.get("/{address}/history", response_model=PaginatedResponse[HistoryItem])
 def get_vault_history(
     address: str = address_param(),
@@ -182,13 +135,13 @@ def get_vault_history(
 
     normalized = normalize_address(address)
 
-    vault_exists_stmt = select(Vault.id).where(Vault.address == normalized)
+    vault_exists_stmt = select(Vault.id).where(func.lower(Vault.address) == normalized)
     if chain_id is not None:
         vault_exists_stmt = vault_exists_stmt.where(Vault.chain_id == chain_id)
     if db.scalar(vault_exists_stmt.limit(1)) is None:
         raise HTTPException(status_code=404, detail="vault not found")
 
-    filters = [VaultEvent.vault_address == normalized]
+    filters = [func.lower(VaultEvent.vault_address) == normalized]
     if chain_id is not None:
         filters.append(VaultEvent.chain_id == chain_id)
     if event_type:
@@ -223,8 +176,61 @@ def get_vault_history(
                 tx_hash=row.tx_hash,
                 log_index=row.log_index,
                 timestamp=row.timestamp,
-                payload_json=row.payload_json,
+                payload_json=row.payload_json or {},
             )
             for row in rows
         ],
+    )
+
+
+@router.get("/{address}", response_model=VaultDetail)
+def get_vault(
+    address: str = address_param(),
+    chain_id: int | None = Query(default=None, alias="chain"),
+    db: Session = Depends(get_db),
+):
+    normalized = normalize_address(address)
+
+    stmt = select(Vault).where(func.lower(Vault.address) == normalized)
+    if chain_id is not None:
+        stmt = stmt.where(Vault.chain_id == chain_id)
+
+    rows = db.scalars(stmt.order_by(Vault.id.desc())).all()
+    if not rows:
+        raise HTTPException(status_code=404, detail="vault not found")
+    if len(rows) > 1 and chain_id is None:
+        raise HTTPException(
+            status_code=409,
+            detail="multiple vaults for this address; specify chain_id",
+        )
+    vault = rows[0]
+
+    event_count = db.scalar(
+        select(func.count())
+        .select_from(VaultEvent)
+        .where(
+            func.lower(VaultEvent.vault_address) == normalized,
+            VaultEvent.chain_id == vault.chain_id,
+        )
+    ) or 0
+
+    latest_event = db.scalar(
+        select(VaultEvent)
+        .where(
+            func.lower(VaultEvent.vault_address) == normalized,
+            VaultEvent.chain_id == vault.chain_id,
+        )
+        .order_by(VaultEvent.block_number.desc(), VaultEvent.log_index.desc())
+        .limit(1)
+    )
+
+    return VaultDetail(
+        chain_id=vault.chain_id,
+        address=vault.address,
+        created_block_number=vault.created_block_number,
+        created_tx_hash=vault.created_tx_hash,
+        created_timestamp=vault.created_timestamp,
+        event_count=event_count,
+        latest_event_block=latest_event.block_number if latest_event else None,
+        latest_event_timestamp=latest_event.timestamp if latest_event else None,
     )
