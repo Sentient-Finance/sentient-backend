@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Integer, JSON, String, UniqueConstraint, func
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    DateTime,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from libs.db.base import Base
@@ -10,7 +18,9 @@ from libs.db.base import Base
 
 class Vault(Base):
     __tablename__ = "vaults"
-    __table_args__ = (UniqueConstraint("chain_id", "address", name="uq_vault_chain_address"),)
+    __table_args__ = (
+        UniqueConstraint("chain_id", "address", name="uq_vault_chain_address"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     chain_id: Mapped[int] = mapped_column(Integer, index=True)
