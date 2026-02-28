@@ -120,7 +120,14 @@ def list_vaults(
     )
 
 
-@vault_router.get("/{address}/history", response_model=PaginatedResponse[HistoryItem])
+@vault_router.get(
+    "/{address}/history",
+    response_model=PaginatedResponse[HistoryItem],
+    responses={
+        404: {"description": "Vault not found"},
+        422: {"description": "Invalid request params (including date range)"},
+    },
+)
 def get_vault_history(
     address: str = address_param(),
     chain_id: int | None = Query(default=None, alias="chain"),
@@ -184,7 +191,15 @@ def get_vault_history(
     )
 
 
-@vault_router.get("/{address}", response_model=VaultDetail)
+@vault_router.get(
+    "/{address}",
+    response_model=VaultDetail,
+    responses={
+        404: {"description": "Vault not found"},
+        409: {"description": "Address exists on multiple chains; provide `chain` query param"},
+        422: {"description": "Invalid address or query params"},
+    },
+)
 def get_vault(
     address: str = address_param(),
     chain_id: int | None = Query(default=None, alias="chain"),
@@ -202,7 +217,7 @@ def get_vault(
     if len(rows) > 1 and chain_id is None:
         raise HTTPException(
             status_code=409,
-            detail="multiple vaults for this address; specify chain_id",
+            detail="multiple vaults for this address; specify `chain` query param",
         )
     vault = rows[0]
 

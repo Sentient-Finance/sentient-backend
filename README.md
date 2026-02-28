@@ -113,6 +113,14 @@ Or via Makefile: `make dev`, `make worker`, `make indexer`.
 | `GET /v1/vault/{address}` | Vault detail |
 | `GET /v1/vault/{address}/history` | Vault event history (type/from/to filters) |
 
+#### API behavior notes
+- `GET /v1/vault/{address}`
+  - `404` when vault is not found
+  - `409` when address exists on multiple chains and `chain` query param is not provided
+- `GET /v1/vault/{address}/history`
+  - `404` when vault is not found
+  - `422` when invalid date range (`from > to`) or invalid params are provided
+
 ### Tests
 
 ```bash
