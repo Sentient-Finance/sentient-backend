@@ -29,6 +29,16 @@ uvicorn apps.api.app.main:app --reload --port 8000
 - Local infra compose
 - Python packaging baseline
 
+## CI
+
+Workflow file: `.github/workflows/ci.yml`
+
+Checks:
+- Ruff lint
+- Black format check
+- Pytest
+- Python package build
+
 ## GitHub → OpenClaw bridge (optional)
 
 Workflow file: `.github/workflows/openclaw-bridge.yml`
