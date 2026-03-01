@@ -19,49 +19,49 @@ libs/
 infra/
   docker-compose.yml   Local Postgres 16 + Redis 7
 alembic/        Database migrations
-scripts/        Bootstrap + dev helpers
+scripts/        Bootstrap helpers (Windows only)
 ```
 
-## Quickstart — 3 steps
+## Quickstart
 
-### Git Bash / Linux / macOS
+### Linux / macOS
 
 ```bash
-# 1. Bootstrap (copies .env, starts docker, installs venv)
-cp .env.example .env && ./scripts/bootstrap.sh
+# 1. Create venv + install deps
+make venv
+make install
 
-# 2. Activate venv
-source .venv/Scripts/activate   # Windows Git Bash
-# source .venv/bin/activate     # Linux / macOS
+# 2. Copy env and start infra
+cp .env.example .env
+make db-up
 
-# 3. Start API
-uvicorn apps.api.app.main:app --reload
+# 3. Migrate database
+make migrate
+
+# 4. Run each service (one terminal per service)
+make dev        # API  →  http://localhost:8000
+make worker     # Celery worker
+make indexer    # On-chain event indexer
 ```
-
-Then open: <http://localhost:8000/health>
 
 ### Windows (PowerShell)
 
 ```powershell
-# 1. Bootstrap
-Copy-Item .env.example .env -ErrorAction SilentlyContinue; .\scripts\bootstrap.ps1
+# 1. Bootstrap: copy .env, docker, venv, install, migrate (one-time)
+.\scripts\bootstrap.ps1
 
 # 2. Activate venv
 .\.venv\Scripts\Activate.ps1
 
-# 3. Start API
-uvicorn apps.api.app.main:app --reload
+# 3. API server
+.\scripts\dev.ps1
+
+# 4. Celery worker (new terminal)
+.\.venv\Scripts\python.exe -m celery -A apps.worker.celery_app.celery_app worker --loglevel=info
+
+# 5. Indexer (new terminal, requires INDEXER_RPC_URL + INDEXER_CONTRACTS in .env)
+.\.venv\Scripts\python.exe -m apps.indexer.main
 ```
-
-### Makefile shorthand (requires `make`)
-
-```bash
-make db-up    # step 1 — start infra only
-make install  # install deps into venv
-make dev      # step 3 — uvicorn with reload
-```
-
-Run `make help` to see all targets.
 
 ## Local runbook
 
@@ -69,39 +69,42 @@ Run `make help` to see all targets.
 
 ```bash
 # Start Postgres 16 + Redis 7
-docker compose -f infra/docker-compose.yml up -d
+make db-up
 
-# Stop (keeps volumes)
-docker compose -f infra/docker-compose.yml down
+# Stop (keep volumes)
+make db-down
 
 # Destroy including data
 docker compose -f infra/docker-compose.yml down -v
 ```
 
-Wait ~5 s for Postgres to become healthy before running migrations.
-
 ### Database migrations
 
 ```bash
 # Apply all pending migrations
-make migrate           # or: python -m alembic upgrade head
+make migrate
 
-# Create a new migration (autogenerate from models)
-make revision MSG="add users table"
+# Create empty migration
+make revision m="add users table"
 
-# Roll back one step
+# Autogenerate migration from model changes (m optional, defaults to timestamp)
+make autogen
+make autogen m="add block_timestamp to chain_events"
+
+# Rollback 1 step
 make downgrade
 ```
 
 ### Running services
 
-| Service | Command                                                              |
-| ------- | -------------------------------------------------------------------- |
-| API     | `uvicorn apps.api.app.main:app --reload`                             |
-| Worker  | `celery -A apps.worker.celery_app.celery_app worker --loglevel=info` |
-| Indexer | `python -m apps.indexer.main`                                        |
+| Service        | Makefile            | Direct command                                                                 |
+| -------------- | ------------------- | ------------------------------------------------------------------------------ |
+| API            | `make dev`          | `python -m uvicorn apps.api.app.main:app --reload`                             |
+| Worker         | `make worker`       | `python -m celery -A apps.worker.celery_app.celery_app worker --loglevel=info` |
+| Indexer (loop) | `make indexer`      | `python -m apps.indexer.main`                                                  |
+| Indexer (once) | `make indexer-once` | `python -m apps.indexer.main --once`                                           |
 
-Or via Makefile: `make dev`, `make worker`, `make indexer`.
+> Run `make help` to see all targets.
 
 ### Health endpoints
 
@@ -127,17 +130,20 @@ make format       # black .
 
 ## Environment variables
 
-Copy `.env.example` to `.env` and adjust as needed.
+Copy `.env.example` → `.env` and fill in the necessary values.
 
-| Variable        | Default                    | Description                  |
-| --------------- | -------------------------- | ---------------------------- |
-| `APP_ENV`       | `dev`                      | Environment name             |
-| `APP_PORT`      | `8000`                     | API port                     |
-| `POSTGRES_HOST` | `127.0.0.1`                | Postgres host                |
-| `POSTGRES_DB`   | `sentient`                 | Database name                |
-| `REDIS_URL`     | `redis://127.0.0.1:6379/0` | Redis DSN (broker + backend) |
-| `ETH_RPC_URL`   | —                          | Ethereum JSON-RPC endpoint   |
-| `DATABASE_URL`  | —                          | Full DSN override (optional) |
+| Variable            | Default                    | Description                                |
+| ------------------- | -------------------------- | ------------------------------------------ |
+| `APP_ENV`           | `dev`                      | Environment name                           |
+| `APP_PORT`          | `8000`                     | API port                                   |
+| `POSTGRES_HOST`     | `127.0.0.1`                | Postgres host                              |
+| `POSTGRES_DB`       | `sentient`                 | Database name                              |
+| `REDIS_URL`         | `redis://127.0.0.1:6379/0` | Redis DSN (broker + backend)               |
+| `ETH_RPC_URL`       | —                          | Ethereum JSON-RPC endpoint                 |
+| `DATABASE_URL`      | —                          | Full DSN override (optional)               |
+| `INDEXER_RPC_URL`   | —                          | RPC for indexer (fallback: `BASE_RPC_URL`) |
+| `INDEXER_CONTRACTS` | —                          | Comma-separated contract addresses         |
+| `INDEXER_CHAIN_ID`  | `84532`                    | Chain ID (default: Base Sepolia)           |
 
 ## CI
 

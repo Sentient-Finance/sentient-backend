@@ -51,6 +51,10 @@ class Settings(BaseSettings):
         alias="MAX_OPEN_POSITIONS",
     )
 
+    indexer_rpc_url: str | None = Field(default=None, alias="INDEXER_RPC_URL")
+    indexer_contracts: str = Field(default="", alias="INDEXER_CONTRACTS")
+    indexer_chain_id: int = Field(default=84532, alias="INDEXER_CHAIN_ID")
+    indexer_confirmations: int = Field(default=2, alias="INDEXER_CONFIRMATIONS")
     indexer_poll_interval_seconds: int = Field(
         default=10,
         alias="INDEXER_POLL_INTERVAL_SECONDS",

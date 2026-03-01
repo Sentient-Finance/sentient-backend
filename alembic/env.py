@@ -8,9 +8,7 @@ from sqlalchemy import engine_from_config, pool
 
 from libs.core.config import get_settings
 from libs.db.base import Base  # noqa: F401 — registers model metadata
-
-# Import model modules here so their tables appear in Base.metadata:
-# from libs.db import models  # example
+import libs.db.models  # noqa: F401 — registers ChainEvent, IndexerCheckpoint on Base.metadata
 
 config = context.config
 

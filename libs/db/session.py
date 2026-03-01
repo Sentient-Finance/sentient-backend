@@ -1,10 +1,12 @@
 from __future__ import annotations
-import os
+
 from typing import Generator
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
+
 from libs.core.config import get_settings
-from libs.db.models import Base
+from libs.db.base import Base
 
 _engine = None
 _SessionLocal = None
@@ -32,20 +34,13 @@ def get_session_factory() -> sessionmaker:
 
 def get_db() -> Generator[Session, None, None]:
     """FastAPI dependency — yields a DB session per request."""
-    SessionLocal = get_session_factory()
-    db = SessionLocal()
+    db = get_session_factory()()
     try:
         yield db
     finally:
         db.close()
 
-def get_database_url() -> str:
-    return os.getenv("DATABASE_URL", "postgresql+psycopg://sentient:sentient@127.0.0.1:5432/sentient")
-
-
-engine = create_engine(get_database_url(), pool_pre_ping=True)
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, class_=Session)
-
 
 def init_db() -> None:
-    Base.metadata.create_all(bind=engine)
+    import libs.db.models  # noqa: F401 — register models on Base.metadata before create_all
+    Base.metadata.create_all(bind=get_engine())
