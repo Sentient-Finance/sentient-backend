@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from apps.api.v1.routes.main import router as v1_router
+from apps.api.v1.routes.vaults import router as vaults_router
 from libs.core.config import get_settings
 
 
@@ -24,7 +25,8 @@ def create_app() -> FastAPI:
     def health_root():
         return {"ok": True, "service": "api"}
 
-    app.include_router(v1_router, prefix="/v1")
+    app.include_router(v1_router, prefix="/api/v1")
+    app.include_router(vaults_router, prefix="/api/v1")
 
     return app
 
