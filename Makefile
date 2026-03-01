@@ -1,4 +1,4 @@
-.PHONY: help venv install install-prod dev lint fix format test db-up db-down migrate revision downgrade indexer worker
+.PHONY: help venv install install-prod dev lint fix format test db-up db-down migrate revision downgrade indexer indexer-once worker
 
 SHELL := bash
 
@@ -31,7 +31,8 @@ help:
 	"  make migrate         Alembic upgrade head" \
 	"  make revision MSG=   Create Alembic revision" \
 	"  make downgrade REV=  Alembic downgrade (default -1)" \
-	"  make indexer         Run indexer module" \
+	"  make indexer         Run indexer module (loop mode)" \
+	"  make indexer-once    Run one indexer batch and exit" \
 	"  make worker          Run worker module"
 
 venv:
@@ -77,6 +78,9 @@ downgrade:
 
 indexer:
 	$(PY) -m apps.indexer.main
+
+indexer-once:
+	$(PY) -m apps.indexer.main --once
 
 worker:
 	$(PY) -m apps.worker.main

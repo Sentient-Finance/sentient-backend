@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 from typing import Generator
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from libs.core.config import get_settings
+from libs.db.base import Base
 
 _engine = None
 _SessionLocal = None
@@ -37,3 +40,9 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
+
+
+def init_db() -> None:
+    import libs.db.models  # noqa: F401
+
+    Base.metadata.create_all(bind=get_engine())

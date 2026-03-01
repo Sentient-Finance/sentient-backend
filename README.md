@@ -102,6 +102,16 @@ make downgrade
 
 Or via Makefile: `make dev`, `make worker`, `make indexer`.
 
+### Indexer quick run (Issue #3)
+
+```bash
+# Run one indexing batch (safe for smoke test)
+make indexer-once
+
+# Run continuous loop mode
+make indexer
+```
+
 ### Health endpoints
 
 | Endpoint | Description |
@@ -136,6 +146,10 @@ Copy `.env.example` to `.env` and adjust as needed.
 | `POSTGRES_DB` | `sentient` | Database name |
 | `REDIS_URL` | `redis://127.0.0.1:6379/0` | Redis DSN (broker + backend) |
 | `ETH_RPC_URL` | — | Ethereum JSON-RPC endpoint |
+| `INDEXER_RPC_URL` | — | RPC URL used by indexer (fallback: `BASE_RPC_URL`) |
+| `INDEXER_CHAIN_ID` | `8453` | Chain id for indexer stream |
+| `INDEXER_CONTRACTS` | — | Comma-separated contract addresses to track |
+| `INDEXER_CONFIRMATIONS` | `2` | Confirmation buffer before indexing tip |
 | `DATABASE_URL` | — | Full DSN override (optional) |
 
 ## CI
