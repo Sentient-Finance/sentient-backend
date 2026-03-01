@@ -19,11 +19,10 @@ from libs.db.session import get_session_factory, init_db
 logger = logging.getLogger(__name__)
 
 EVENT_SIGNATURES = {
-    # "VaultInitialized(address,address)": "VaultInitialized",
-    # "TokenRuleSet(address,bool,uint256,uint256,uint256)": "TokenRuleSet",
-    # "SwapExecuted(address,address,uint256,uint256,uint256)": "SwapExecuted",
-    # "CrossChainShieldTriggered(uint64,address,uint256)": "CrossChainShieldTriggered",
-    "Transfer(address,address,uint256)": "Transfer",
+    "VaultInitialized(address,address)": "VaultInitialized",
+    "TokenRuleSet(address,bool,uint256,uint256,uint256)": "TokenRuleSet",
+    "SwapExecuted(address,address,uint256,uint256,uint256)": "SwapExecuted",
+    "CrossChainShieldTriggered(uint64,address,uint256)": "CrossChainShieldTriggered",
 }
 
 
