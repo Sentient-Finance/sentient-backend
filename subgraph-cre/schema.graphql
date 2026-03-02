@@ -38,7 +38,6 @@ type VaultCreated @entity(immutable: true) {
   id: Bytes!
   user: Bytes! # address
   vault: Bytes! # address
-  portfolio: Bytes! # address
   vaultIndex: BigInt! # uint256
   blockNumber: BigInt!
   blockTimestamp: BigInt!

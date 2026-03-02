@@ -113,12 +113,6 @@
         "internalType": "address"
       },
       {
-        "name": "portfolio",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
         "name": "vaultIndex",
         "type": "uint256",
         "indexed": false,

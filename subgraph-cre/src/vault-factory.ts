@@ -77,7 +77,6 @@ export function handleVaultCreated(event: VaultCreatedEvent): void {
   )
   entity.user = event.params.user
   entity.vault = event.params.vault
-  entity.portfolio = event.params.portfolio
   entity.vaultIndex = event.params.vaultIndex
 
   entity.blockNumber = event.block.number
