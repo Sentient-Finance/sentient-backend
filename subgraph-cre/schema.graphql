@@ -43,3 +43,30 @@ type VaultCreated @entity(immutable: true) {
   blockTimestamp: BigInt!
   transactionHash: Bytes!
 }
+
+type Vault @entity(immutable: false) {
+  id: ID!
+  address: Bytes!
+  owner: Bytes
+  executor: Bytes
+  createdAtBlock: BigInt!
+  createdAtTimestamp: BigInt!
+  createdTxHash: Bytes!
+  factoryIndex: BigInt!
+  eventCount: BigInt!
+}
+
+type VaultEvent @entity(immutable: true) {
+  id: ID! # txHash-logIndex
+  vault: Vault!
+  eventName: String!
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  txHash: Bytes!
+  logIndex: BigInt!
+  token: Bytes
+  tokenIn: Bytes
+  tokenOut: Bytes
+  amountIn: BigInt
+  amountOut: BigInt
+}
