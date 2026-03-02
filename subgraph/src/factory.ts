@@ -1,7 +1,10 @@
 import { BigInt } from '@graphprotocol/graph-ts'
 
 import { VaultCreated } from '../generated/VaultFactory/VaultFactory'
-import { PortfolioVault as PortfolioVaultTemplate } from '../generated/templates'
+import {
+  Portfolio as PortfolioTemplate,
+  PortfolioVault as PortfolioVaultTemplate,
+} from '../generated/templates'
 import { Vault } from '../generated/schema'
 
 export function handleVaultCreated(event: VaultCreated): void {
@@ -11,6 +14,7 @@ export function handleVaultCreated(event: VaultCreated): void {
   if (vault == null) {
     vault = new Vault(id)
     vault.address = event.params.vault
+    vault.portfolioAddress = event.params.portfolio
     vault.owner = event.params.owner
     vault.executor = event.params.executor
     vault.createdAtBlock = event.block.number
@@ -21,4 +25,5 @@ export function handleVaultCreated(event: VaultCreated): void {
   }
 
   PortfolioVaultTemplate.create(event.params.vault)
+  PortfolioTemplate.create(event.params.portfolio)
 }

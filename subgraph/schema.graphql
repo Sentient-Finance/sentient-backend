@@ -1,6 +1,7 @@
 type Vault @entity(immutable: false) {
   id: ID!
   address: Bytes!
+  portfolioAddress: Bytes
   owner: Bytes
   executor: Bytes
   createdAtBlock: BigInt!
