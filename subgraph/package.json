@@ -1,0 +1,15 @@
+{
+  "name": "sentient-subgraph",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "codegen": "graph codegen",
+    "build": "graph build",
+    "deploy:studio": "graph deploy --studio sentient-vaults"
+  },
+  "devDependencies": {
+    "@graphprotocol/graph-cli": "^0.86.0",
+    "@graphprotocol/graph-ts": "^0.35.1",
+    "typescript": "^5.8.2"
+  }
+}

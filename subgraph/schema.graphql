@@ -1,12 +1,11 @@
 type Vault @entity(immutable: false) {
   id: ID!
   address: Bytes!
-  portfolioAddress: Bytes
   owner: Bytes
-  executor: Bytes
   createdAtBlock: BigInt!
   createdAtTimestamp: BigInt!
   createdTxHash: Bytes!
+  factoryIndex: BigInt!
   eventCount: BigInt!
 }
 
@@ -19,7 +18,6 @@ type VaultEvent @entity(immutable: true) {
   txHash: Bytes!
   logIndex: BigInt!
 
-  # optional normalized fields for common events
   token: Bytes
   tokenIn: Bytes
   tokenOut: Bytes
