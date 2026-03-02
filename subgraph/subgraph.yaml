@@ -1,0 +1,80 @@
+specVersion: 1.3.0
+indexerHints:
+  prune: auto
+schema:
+  file: ./schema.graphql
+
+dataSources:
+  - kind: ethereum
+    name: VaultFactory
+    network: base
+    source:
+      address: "0x0000000000000000000000000000000000000000" # TODO: replace with mainnet factory
+      abi: VaultFactory
+      startBlock: 0 # TODO: replace with deployment block
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      file: ./src/factory.ts
+      entities:
+        - Vault
+      abis:
+        - name: VaultFactory
+          file: ./abis/VaultFactory.json
+      eventHandlers:
+        - event: VaultCreated(address,address,address,address)
+          handler: handleVaultCreated
+
+templates:
+  - kind: ethereum
+    name: PortfolioVault
+    network: base
+    source:
+      abi: PortfolioVault
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      file: ./src/vault.ts
+      entities:
+        - Vault
+        - VaultEvent
+      abis:
+        - name: PortfolioVault
+          file: ./abis/PortfolioVault.json
+      eventHandlers:
+        - event: VaultInitialized(address,address)
+          handler: handleVaultInitialized
+        - event: TokenRuleSet(address,bool,uint256,uint256,uint256)
+          handler: handleTokenRuleSet
+        - event: SwapExecuted(address,address,uint256,uint256,uint256)
+          handler: handleSwapExecuted
+        - event: CrossChainShieldTriggered(uint64,address,uint256)
+          handler: handleCrossChainShieldTriggered
+
+  - kind: ethereum
+    name: Portfolio
+    network: base
+    source:
+      abi: PortfolioVault
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      file: ./src/vault.ts
+      entities:
+        - Vault
+        - VaultEvent
+      abis:
+        - name: PortfolioVault
+          file: ./abis/PortfolioVault.json
+      eventHandlers:
+        - event: VaultInitialized(address,address)
+          handler: handleVaultInitialized
+        - event: TokenRuleSet(address,bool,uint256,uint256,uint256)
+          handler: handleTokenRuleSet
+        - event: SwapExecuted(address,address,uint256,uint256,uint256)
+          handler: handleSwapExecuted
+        - event: CrossChainShieldTriggered(uint64,address,uint256)
+          handler: handleCrossChainShieldTriggered
