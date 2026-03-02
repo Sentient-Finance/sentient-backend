@@ -1,0 +1,8 @@
+{
+  "base": {
+    "VaultFactory": {
+      "address": "0x355AA9651Cc42f22693672477037Be1aF56e2510",
+      "startBlock": 42825154
+    }
+  }
+}
