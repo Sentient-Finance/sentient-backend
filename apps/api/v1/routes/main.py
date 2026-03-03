@@ -7,10 +7,6 @@ from libs.db.session import get_db
 
 router = APIRouter()
 
-@router.get("/health", tags=["meta"])
-def health():
-    return {"ok": True, "service": "api"}
-
 @router.get("/ready", tags=["meta"])
 def ready(db: Session = Depends(get_db)):
     try:
