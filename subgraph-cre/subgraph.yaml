@@ -3,6 +3,7 @@ indexerHints:
   prune: auto
 schema:
   file: ./schema.graphql
+
 dataSources:
   - kind: ethereum
     name: VaultFactory
@@ -15,24 +16,39 @@ dataSources:
       kind: ethereum/events
       apiVersion: 0.0.9
       language: wasm/assemblyscript
+      file: ./src/factory.ts
       entities:
-        - DefaultsUpdated
-        - ExecutorUpdated
-        - OwnershipTransferred
-        - RelayerUpdated
-        - VaultCreated
+        - Vault
       abis:
         - name: VaultFactory
           file: ./abis/VaultFactory.json
       eventHandlers:
-        - event: DefaultsUpdated(uint256,uint256)
-          handler: handleDefaultsUpdated
-        - event: ExecutorUpdated(indexed address,indexed address)
-          handler: handleExecutorUpdated
-        - event: OwnershipTransferred(indexed address,indexed address)
-          handler: handleOwnershipTransferred
-        - event: RelayerUpdated(indexed address,indexed address)
-          handler: handleRelayerUpdated
-        - event: VaultCreated(indexed address,indexed address,uint256)
+        - event: VaultCreated(address,address,address)
           handler: handleVaultCreated
-      file: ./src/vault-factory.ts
+
+templates:
+  - kind: ethereum
+    name: PortfolioVault
+    network: base
+    source:
+      abi: PortfolioVault
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      file: ./src/vault.ts
+      entities:
+        - Vault
+        - VaultEvent
+      abis:
+        - name: PortfolioVault
+          file: ./abis/PortfolioVault.json
+      eventHandlers:
+        - event: VaultInitialized(address,address)
+          handler: handleVaultInitialized
+        - event: TokenRuleSet(address,bool,uint256,uint256,uint256)
+          handler: handleTokenRuleSet
+        - event: SwapExecuted(address,address,uint256,uint256,uint256)
+          handler: handleSwapExecuted
+        - event: CrossChainShieldTriggered(uint64,address,uint256)
+          handler: handleCrossChainShieldTriggered
