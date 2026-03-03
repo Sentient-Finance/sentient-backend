@@ -38,9 +38,42 @@ type VaultCreated @entity(immutable: true) {
   id: Bytes!
   user: Bytes! # address
   vault: Bytes! # address
+<<<<<<< HEAD
   portfolio: Bytes! # address
+=======
+>>>>>>> d0195138a92098860f20d945b08ef3d4cf394d54
   vaultIndex: BigInt! # uint256
   blockNumber: BigInt!
   blockTimestamp: BigInt!
   transactionHash: Bytes!
 }
+<<<<<<< HEAD
+=======
+
+type Vault @entity(immutable: false) {
+  id: ID!
+  address: Bytes!
+  owner: Bytes
+  executor: Bytes
+  createdAtBlock: BigInt!
+  createdAtTimestamp: BigInt!
+  createdTxHash: Bytes!
+  factoryIndex: BigInt!
+  eventCount: BigInt!
+}
+
+type VaultEvent @entity(immutable: true) {
+  id: ID! # txHash-logIndex
+  vault: Vault!
+  eventName: String!
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  txHash: Bytes!
+  logIndex: BigInt!
+  token: Bytes
+  tokenIn: Bytes
+  tokenOut: Bytes
+  amountIn: BigInt
+  amountOut: BigInt
+}
+>>>>>>> d0195138a92098860f20d945b08ef3d4cf394d54

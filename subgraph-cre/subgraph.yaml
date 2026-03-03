@@ -8,9 +8,15 @@ dataSources:
     name: VaultFactory
     network: base
     source:
+<<<<<<< HEAD
       address: "0x355AA9651Cc42f22693672477037Be1aF56e2510"
       abi: VaultFactory
       startBlock: 42825154
+=======
+      address: "0x00328fc9a60d429cc347e4cf59363077dd6ac73a"
+      abi: VaultFactory
+      startBlock: 42840032
+>>>>>>> d0195138a92098860f20d945b08ef3d4cf394d54
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.9
@@ -21,12 +27,17 @@ dataSources:
         - OwnershipTransferred
         - RelayerUpdated
         - VaultCreated
+<<<<<<< HEAD
+=======
+        - Vault
+>>>>>>> d0195138a92098860f20d945b08ef3d4cf394d54
       abis:
         - name: VaultFactory
           file: ./abis/VaultFactory.json
       eventHandlers:
         - event: DefaultsUpdated(uint256,uint256)
           handler: handleDefaultsUpdated
+<<<<<<< HEAD
         - event: ExecutorUpdated(indexed address,indexed address)
           handler: handleExecutorUpdated
         - event: OwnershipTransferred(indexed address,indexed address)
@@ -36,3 +47,41 @@ dataSources:
         - event: VaultCreated(indexed address,indexed address,indexed address,uint256)
           handler: handleVaultCreated
       file: ./src/vault-factory.ts
+=======
+        - event: ExecutorUpdated(address,address)
+          handler: handleExecutorUpdated
+        - event: OwnershipTransferred(address,address)
+          handler: handleOwnershipTransferred
+        - event: RelayerUpdated(address,address)
+          handler: handleRelayerUpdated
+        - event: VaultCreated(address,address,uint256)
+          handler: handleVaultCreated
+      file: ./src/vault-factory.ts
+
+templates:
+  - kind: ethereum
+    name: PortfolioVault
+    network: base
+    source:
+      abi: PortfolioVault
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - Vault
+        - VaultEvent
+      abis:
+        - name: PortfolioVault
+          file: ./abis/PortfolioVault.json
+      eventHandlers:
+        - event: VaultInitialized(address,address)
+          handler: handleVaultInitialized
+        - event: TokenRuleSet(address,bool,uint256,uint256,uint256)
+          handler: handleTokenRuleSet
+        - event: SwapExecuted(address,address,uint256,uint256,uint256)
+          handler: handleSwapExecuted
+        - event: CrossChainShieldTriggered(uint64,address,uint256)
+          handler: handleCrossChainShieldTriggered
+      file: ./src/vault.ts
+>>>>>>> d0195138a92098860f20d945b08ef3d4cf394d54
