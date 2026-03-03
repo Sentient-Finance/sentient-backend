@@ -11,7 +11,7 @@ dataSources:
     source:
       address: "0x00328fc9a60d429cc347e4cf59363077dd6ac73a"
       abi: VaultFactory
-      startBlock: 42840032
+      startBlock: 42840230
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.9
