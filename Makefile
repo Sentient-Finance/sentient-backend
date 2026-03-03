@@ -79,5 +79,5 @@ indexer:
 	$(PY) -m apps.indexer.main
 
 worker:
-	$(PY) -m apps.worker.main
+	$(PY) -m celery -A apps.worker.celery_app worker -l info
 
