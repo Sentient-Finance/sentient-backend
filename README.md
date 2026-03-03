@@ -151,6 +151,18 @@ Copy `.env.example` to `.env` and adjust as needed.
 | `ETH_RPC_URL` | — | Ethereum JSON-RPC endpoint |
 | `DATABASE_URL` | — | Full DSN override (optional) |
 
+## Strategy engine tick (Issue #5)
+
+Celery beat runs `worker.strategy.tick` every `STRATEGY_TICK_SECONDS` (default `60`).
+
+For each vault, the strategy worker evaluates latest DB events:
+- `TokenRuleSet` payload: `buy_threshold`, `sell_threshold`, `cooldown_seconds`, `last_executed_at`
+- `PriceObserved` payload: `price`
+
+If threshold + cooldown checks pass, it enqueues `worker.execution.enqueue` with Redis idempotency lock:
+- key format: `strategy:{vault}:{action}:{YYYYMMDDHHMM}`
+- lock TTL: 90 seconds
+
 ## CI
 
 Workflow: `.github/workflows/openclaw-bridge.yml`

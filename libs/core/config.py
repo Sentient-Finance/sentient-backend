@@ -64,6 +64,11 @@ class Settings(BaseSettings):
         alias="INDEXER_BATCH_SIZE",
     )
 
+    strategy_tick_seconds: int = Field(
+        default=60,
+        alias="STRATEGY_TICK_SECONDS",
+    )
+
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
 
     @property
