@@ -1,8 +1,3 @@
-<<<<<<< HEAD
-=======
-import { BigInt } from "@graphprotocol/graph-ts"
-
->>>>>>> d0195138a92098860f20d945b08ef3d4cf394d54
 import {
   DefaultsUpdated as DefaultsUpdatedEvent,
   ExecutorUpdated as ExecutorUpdatedEvent,
@@ -15,15 +10,8 @@ import {
   ExecutorUpdated,
   OwnershipTransferred,
   RelayerUpdated,
-<<<<<<< HEAD
   VaultCreated
 } from "../generated/schema"
-=======
-  Vault,
-  VaultCreated,
-} from "../generated/schema"
-import { PortfolioVault as PortfolioVaultTemplate } from "../generated/templates"
->>>>>>> d0195138a92098860f20d945b08ef3d4cf394d54
 
 export function handleDefaultsUpdated(event: DefaultsUpdatedEvent): void {
   let entity = new DefaultsUpdated(
@@ -89,35 +77,11 @@ export function handleVaultCreated(event: VaultCreatedEvent): void {
   )
   entity.user = event.params.user
   entity.vault = event.params.vault
-<<<<<<< HEAD
-  entity.portfolio = event.params.portfolio
-=======
->>>>>>> d0195138a92098860f20d945b08ef3d4cf394d54
   entity.vaultIndex = event.params.vaultIndex
 
   entity.blockNumber = event.block.number
   entity.blockTimestamp = event.block.timestamp
   entity.transactionHash = event.transaction.hash
-<<<<<<< HEAD
 
   entity.save()
-=======
-  entity.save()
-
-  const id = event.params.vault.toHexString().toLowerCase()
-  let vault = Vault.load(id)
-  if (vault == null) {
-    vault = new Vault(id)
-    vault.address = event.params.vault
-    vault.owner = event.params.user
-    vault.createdAtBlock = event.block.number
-    vault.createdAtTimestamp = event.block.timestamp
-    vault.createdTxHash = event.transaction.hash
-    vault.factoryIndex = event.params.vaultIndex
-    vault.eventCount = BigInt.zero()
-    vault.save()
-  }
-
-  PortfolioVaultTemplate.create(event.params.vault)
->>>>>>> d0195138a92098860f20d945b08ef3d4cf394d54
 }
