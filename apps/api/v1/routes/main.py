@@ -1,25 +1,23 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
-from apps.api.v1.routes.vaults import vault_router, vaults_router
-from libs.core.config import Settings
+from apps.api.v1.routes.vaults import router as vaults_router
+from libs.db.session import get_db
 
-router = APIRouter(tags=["meta"])
+router = APIRouter()
 
+@router.get("/health", tags=["meta"])
+def health():
+    return {"ok": True, "service": "api"}
 
-def get_settings_from_request(request: Request) -> Settings:
-    return request.app.state.settings
-
-
-@router.get("/health")
-def health(settings: Settings = Depends(get_settings_from_request)):
-    return {"ok": True, "service": "api", "env": settings.app_env}
-
-
-@router.get("/ready")
-def ready(settings: Settings = Depends(get_settings_from_request)):
+@router.get("/ready", tags=["meta"])
+def ready(db: Session = Depends(get_db)):
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception:
+        raise HTTPException(status_code=503, detail="Database unavailable")
     return {"ok": True, "service": "api", "ready": True}
 
-
 router.include_router(vaults_router)
-router.include_router(vault_router)
 

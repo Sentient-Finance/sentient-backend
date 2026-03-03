@@ -37,7 +37,7 @@ source .venv/Scripts/activate   # Windows Git Bash
 uvicorn apps.api.app.main:app --reload
 ```
 
-Then open: <http://localhost:8000/health>
+Then open: <http://localhost:8000/api/v1/health>
 
 ### Windows (PowerShell)
 
@@ -97,27 +97,29 @@ make downgrade
 | Service | Command |
 |---------|---------|
 | API | `uvicorn apps.api.app.main:app --reload` |
-| Worker | `celery -A apps.worker.celery_app.celery_app worker --loglevel=info` |
+| Worker | `celery -A apps.worker.celery_app worker -l info` |
 | Indexer | `python -m apps.indexer.main` |
 
 Or via Makefile: `make dev`, `make worker`, `make indexer`.
 
-### Health endpoints
+### API endpoints
+
+All routes are prefixed with `/api/v1`.
 
 | Endpoint | Description |
-|----------|-------------|
-| `GET /health` | Root health (load-balancer friendly) |
-| `GET /v1/health` | API v1 health |
-| `GET /v1/ready` | Readiness probe |
-| `GET /v1/vaults` | Vault list (pagination + chain filter) |
-| `GET /v1/vault/{address}` | Vault detail |
-| `GET /v1/vault/{address}/history` | Vault event history (type/from/to filters) |
+| -------- | ----------- |
+| `GET /api/v1/health` | Liveness probe — returns `200` if the process is running |
+| `GET /api/v1/ready` | Readiness probe — returns `200` if DB is reachable, `503` otherwise |
+| `GET /api/v1/vaults` | Vault list (pagination + chain filter) |
+| `GET /api/v1/vault/{address}` | Vault detail |
+| `GET /api/v1/vault/{address}/history` | Vault event history (type/from/to filters) |
 
 #### API behavior notes
-- `GET /v1/vault/{address}`
+
+- `GET /api/v1/vault/{address}`
   - `404` when vault is not found
   - `409` when address exists on multiple chains and `chain` query param is not provided
-- `GET /v1/vault/{address}/history`
+- `GET /api/v1/vault/{address}/history`
   - `404` when vault is not found
   - `422` when invalid date range (`from > to`) or invalid params are provided
 

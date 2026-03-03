@@ -11,8 +11,7 @@ from sqlalchemy.orm import Session
 from libs.db.models import Vault, VaultEvent
 from libs.db.session import get_db
 
-vaults_router = APIRouter(prefix="/vaults", tags=["vaults"])
-vault_router = APIRouter(prefix="/vault", tags=["vault"])
+router = APIRouter(prefix="/vaults", tags=["vaults"])
 
 T = TypeVar("T")
 
@@ -82,9 +81,9 @@ def address_param() -> str:
     return Path(..., pattern=r"^0x[a-fA-F0-9]{40}$", description="Vault address")
 
 
-@vaults_router.get("", response_model=PaginatedResponse[VaultListItem])
+@router.get("", response_model=PaginatedResponse[VaultListItem])
 def list_vaults(
-    chain_id: int | None = Query(default=None, alias="chain"),
+    chain_id: int | None = Query(default=84532, alias="chain"),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -120,7 +119,7 @@ def list_vaults(
     )
 
 
-@vault_router.get(
+@router.get(
     "/{address}/history",
     response_model=PaginatedResponse[HistoryItem],
     responses={
@@ -191,7 +190,7 @@ def get_vault_history(
     )
 
 
-@vault_router.get(
+@router.get(
     "/{address}",
     response_model=VaultDetail,
     responses={
