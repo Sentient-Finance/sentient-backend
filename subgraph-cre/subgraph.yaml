@@ -23,7 +23,7 @@ dataSources:
         - name: VaultFactory
           file: ./abis/VaultFactory.json
       eventHandlers:
-        - event: VaultCreated(indexed address,indexed address,indexed address)
+        - event: VaultCreated(indexed address,indexed address,uint256)
           handler: handleVaultCreated
 
 templates:
