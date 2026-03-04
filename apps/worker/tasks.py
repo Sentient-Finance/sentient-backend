@@ -5,17 +5,16 @@ Import celery_app here (not the other way around) to avoid circular imports.
 
 from __future__ import annotations
 
-import json
-from datetime import datetime, timezone
-
-from redis import Redis
-from sqlalchemy import select
-
 from apps.worker.celery_app import celery_app
+from libs.chain.cre_client import ChainlinkCreClient, CreClientError
 from libs.core.config import get_settings
-from libs.core.strategy import StrategyRule, evaluate_rule
-from libs.db.models import Vault, VaultEvent
 from libs.db.session import get_session_factory
+from libs.services.executions import (
+    create_execution_attempt,
+    get_execution,
+    mark_execution_status,
+    next_attempt_number,
+)
 
 
 @celery_app.task(name="worker.ping")
@@ -23,108 +22,84 @@ def ping() -> str:
     return "pong"
 
 
-@celery_app.task(name="worker.execution.enqueue")
-def enqueue_execution(vault_address: str, action: str, reason: str) -> dict:
-    """Placeholder execution enqueue task.
-
-    In Issue #6 this should call the CRE execution service.
-    """
-
-    return {
-        "vault": vault_address,
-        "action": action,
-        "reason": reason,
-        "status": "queued",
-        "queued_at": datetime.now(timezone.utc).isoformat(),
-    }
-
-
-def _latest_event(db, vault_address: str, event_type: str) -> VaultEvent | None:
-    return db.scalar(
-        select(VaultEvent)
-        .where(VaultEvent.vault_address == vault_address, VaultEvent.event_type == event_type)
-        .order_by(VaultEvent.block_number.desc(), VaultEvent.log_index.desc())
-        .limit(1)
-    )
-
-
-@celery_app.task(name="worker.strategy.tick")
-def strategy_tick() -> dict:
-    """Periodic strategy scan.
-
-    - Reads latest TokenRuleSet + PriceObserved per vault from DB
-    - Evaluates threshold + cooldown
-    - Enqueues execution task with Redis idempotency lock
-    """
-
+@celery_app.task(bind=True, name="worker.process_execution", max_retries=4)
+def process_execution(self, execution_id: int) -> str:
+    settings = get_settings()
     session_factory = get_session_factory()
-    redis_client = Redis.from_url(get_settings().redis_url)
-    inspected = 0
-    triggered = 0
-    skipped = 0
 
-    with session_factory() as db:
-        vaults = db.scalars(select(Vault)).all()
+    db = session_factory()
+    try:
+        execution = get_execution(db, execution_id)
+        if execution is None:
+            return "missing"
 
-        for vault in vaults:
-            inspected += 1
+        attempt_no = next_attempt_number(db, execution_id)
+        payload = {
+            "chainId": execution.chain_id,
+            "vaultAddress": execution.vault_address,
+            "action": execution.action,
+            "reason": execution.reason,
+            "metadata": execution.metadata_json or {},
+        }
 
-            rule_event = _latest_event(db, vault.address, "TokenRuleSet")
-            price_event = _latest_event(db, vault.address, "PriceObserved")
+        mark_execution_status(execution, status="submitted")
+        create_execution_attempt(
+            db,
+            execution=execution,
+            attempt_number=attempt_no,
+            status="submitted",
+            request_json=payload,
+        )
+        db.commit()
 
-            if rule_event is None or price_event is None:
-                skipped += 1
-                continue
-
-            try:
-                rule_payload = rule_event.payload_json if isinstance(rule_event.payload_json, dict) else json.loads(rule_event.payload_json)
-                price_payload = price_event.payload_json if isinstance(price_event.payload_json, dict) else json.loads(price_event.payload_json)
-            except Exception:
-                skipped += 1
-                continue
-
-            buy_threshold = rule_payload.get("buy_threshold")
-            sell_threshold = rule_payload.get("sell_threshold")
-            cooldown_seconds = int(rule_payload.get("cooldown_seconds", 300))
-            last_executed_iso = rule_payload.get("last_executed_at")
-            current_price = float(price_payload.get("price", 0))
-
-            last_executed_at = None
-            if last_executed_iso:
-                try:
-                    last_executed_at = datetime.fromisoformat(last_executed_iso.replace("Z", "+00:00"))
-                except Exception:
-                    last_executed_at = None
-
-            decision = evaluate_rule(
-                StrategyRule(
-                    vault_address=vault.address,
-                    buy_threshold=float(buy_threshold) if buy_threshold is not None else None,
-                    sell_threshold=float(sell_threshold) if sell_threshold is not None else None,
-                    cooldown_seconds=cooldown_seconds,
-                    last_executed_at=last_executed_at,
-                ),
-                current_price=current_price,
+        try:
+            client = ChainlinkCreClient(settings)
+            result = client.submit_execution(
+                chain_id=execution.chain_id,
+                vault_address=execution.vault_address,
+                action=execution.action,
+                reason=execution.reason,
+                metadata=execution.metadata_json or {},
             )
 
-            if not decision.trigger or decision.action is None:
-                skipped += 1
-                continue
+            final_status = "confirmed" if result.tx_hash else "submitted"
+            mark_execution_status(
+                execution,
+                status=final_status,
+                tx_hash=result.tx_hash,
+                external_execution_id=result.external_execution_id,
+                error_message=None,
+            )
+            create_execution_attempt(
+                db,
+                execution=execution,
+                attempt_number=attempt_no,
+                status=final_status,
+                request_json=payload,
+                response_json=result.raw_response,
+            )
+            db.commit()
+            return final_status
+        except CreClientError as exc:
+            retries = int(getattr(self.request, "retries", 0))
+            final_failure = retries >= self.max_retries
+            status = "dead_letter" if final_failure else "queued"
 
-            minute_key = datetime.now(timezone.utc).strftime("%Y%m%d%H%M")
-            idem_key = f"strategy:{vault.address}:{decision.action}:{minute_key}"
-            lock = redis_client.set(idem_key, "1", ex=90, nx=True)
+            mark_execution_status(execution, status=status, error_message=str(exc))
+            create_execution_attempt(
+                db,
+                execution=execution,
+                attempt_number=attempt_no,
+                status="failed",
+                request_json=payload,
+                error_message=str(exc),
+            )
+            db.commit()
 
-            if not lock:
-                skipped += 1
-                continue
+            if final_failure:
+                return "dead_letter"
 
-            enqueue_execution.delay(vault.address, decision.action, decision.reason)
-            triggered += 1
-
-    return {
-        "inspected": inspected,
-        "triggered": triggered,
-        "skipped": skipped,
-        "at": datetime.now(timezone.utc).isoformat(),
-    }
+            countdown = min(15 * (2**retries), 5 * 60)
+            raise self.retry(exc=exc, countdown=countdown)
+    finally:
+        db.close()

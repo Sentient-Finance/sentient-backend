@@ -6,12 +6,13 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     DateTime,
+    ForeignKey,
     Integer,
     String,
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from libs.db.base import Base
 
@@ -71,6 +72,7 @@ class ExecutionRequest(Base):
     idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
 
     tx_hash: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    external_execution_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
@@ -81,3 +83,31 @@ class ExecutionRequest(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+    attempts: Mapped[list["ExecutionAttempt"]] = relationship(
+        back_populates="execution_request", cascade="all, delete-orphan"
+    )
+
+
+class ExecutionAttempt(Base):
+    __tablename__ = "execution_attempts"
+    __table_args__ = (
+        UniqueConstraint(
+            "execution_request_id", "attempt_number", name="uq_execution_attempt_number"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    execution_request_id: Mapped[int] = mapped_column(
+        ForeignKey("execution_requests.id", ondelete="CASCADE"), index=True
+    )
+    attempt_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    request_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    response_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+
+    execution_request: Mapped[ExecutionRequest] = relationship(back_populates="attempts")
