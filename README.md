@@ -163,6 +163,18 @@ If threshold + cooldown checks pass, it enqueues `worker.execution.enqueue` with
 - key format: `strategy:{vault}:{action}:{YYYYMMDDHHMM}`
 - lock TTL: 90 seconds
 
+## Execution API baseline (Issue #6)
+
+Write endpoint:
+- `POST /v1/vaults/{address}/action/execute`
+  - optional header: `Idempotency-Key`
+
+Status endpoint:
+- `GET /v1/vaults/executions/{execution_id}`
+
+Current status flow:
+- `queued` (CRE submit/confirm is implemented in the next phase)
+
 ## CI
 
 Workflow: `.github/workflows/openclaw-bridge.yml`

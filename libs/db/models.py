@@ -53,3 +53,31 @@ class VaultEvent(Base):
     indexed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class ExecutionRequest(Base):
+    __tablename__ = "execution_requests"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_execution_idempotency_key"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    chain_id: Mapped[int] = mapped_column(Integer, index=True)
+    vault_address: Mapped[str] = mapped_column(String(64), index=True)
+    action: Mapped[str] = mapped_column(String(32), index=True)
+    reason: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+    status: Mapped[str] = mapped_column(String(24), index=True, default="queued")
+    idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
+
+    tx_hash: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

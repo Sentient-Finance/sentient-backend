@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Generic, Literal, TypeVar
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
-from libs.db.models import Vault, VaultEvent
+from libs.db.models import ExecutionRequest, Vault, VaultEvent
 from libs.db.session import get_db
 
 router = APIRouter(prefix="/vaults", tags=["vaults"])
@@ -71,6 +72,33 @@ class HistoryItem(BaseModel):
     log_index: int
     timestamp: datetime
     payload_json: dict[str, Any]
+
+
+class ExecuteActionRequest(BaseModel):
+    action: Literal["buy", "sell", "pause", "shield"] = "buy"
+    reason: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ExecuteActionResponse(BaseModel):
+    execution_id: int
+    status: str
+    vault_address: str
+    action: str
+    queued_at: datetime
+
+
+class ExecutionStatusResponse(BaseModel):
+    execution_id: int
+    chain_id: int
+    vault_address: str
+    action: str
+    status: str
+    reason: str | None
+    tx_hash: str | None
+    error_message: str | None
+    created_at: datetime
+    updated_at: datetime
 
 
 def normalize_address(address: str) -> str:
@@ -248,4 +276,88 @@ def get_vault(
         event_count=event_count,
         latest_event_block=latest_event.block_number if latest_event else None,
         latest_event_timestamp=latest_event.timestamp if latest_event else None,
+    )
+
+
+@router.post(
+    "/{address}/action/execute",
+    response_model=ExecuteActionResponse,
+    responses={
+        404: {"description": "Vault not found"},
+        409: {"description": "Duplicate idempotency key"},
+    },
+)
+def execute_vault_action(
+    body: ExecuteActionRequest,
+    address: str = address_param(),
+    chain_id: int | None = Query(default=None, alias="chain"),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    db: Session = Depends(get_db),
+):
+    normalized = normalize_address(address)
+
+    vault_stmt = select(Vault).where(func.lower(Vault.address) == normalized)
+    if chain_id is not None:
+        vault_stmt = vault_stmt.where(Vault.chain_id == chain_id)
+
+    vault = db.scalar(vault_stmt.order_by(Vault.id.desc()).limit(1))
+    if vault is None:
+        raise HTTPException(status_code=404, detail="vault not found")
+
+    idem = idempotency_key or f"exec:{vault.chain_id}:{normalized}:{body.action}:{uuid4().hex[:12]}"
+
+    existing = db.scalar(
+        select(ExecutionRequest).where(ExecutionRequest.idempotency_key == idem).limit(1)
+    )
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="duplicate idempotency key")
+
+    row = ExecutionRequest(
+        chain_id=vault.chain_id,
+        vault_address=vault.address,
+        action=body.action,
+        reason=body.reason,
+        status="queued",
+        idempotency_key=idem,
+        metadata_json=body.metadata,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+
+    return ExecuteActionResponse(
+        execution_id=row.id,
+        status=row.status,
+        vault_address=row.vault_address,
+        action=row.action,
+        queued_at=row.created_at,
+    )
+
+
+@router.get(
+    "/executions/{execution_id}",
+    response_model=ExecutionStatusResponse,
+    responses={404: {"description": "Execution not found"}},
+)
+def get_execution_status(
+    execution_id: int,
+    db: Session = Depends(get_db),
+):
+    row = db.scalar(
+        select(ExecutionRequest).where(ExecutionRequest.id == execution_id).limit(1)
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="execution not found")
+
+    return ExecutionStatusResponse(
+        execution_id=row.id,
+        chain_id=row.chain_id,
+        vault_address=row.vault_address,
+        action=row.action,
+        status=row.status,
+        reason=row.reason,
+        tx_hash=row.tx_hash,
+        error_message=row.error_message,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
     )
