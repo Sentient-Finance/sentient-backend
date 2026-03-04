@@ -5,19 +5,19 @@
       {
         "indexed": true,
         "internalType": "address",
-        "name": "vault",
+        "name": "user",
         "type": "address"
       },
       {
         "indexed": true,
         "internalType": "address",
-        "name": "owner",
+        "name": "vault",
         "type": "address"
       },
       {
         "indexed": false,
         "internalType": "uint256",
-        "name": "vaultId",
+        "name": "vaultIndex",
         "type": "uint256"
       }
     ],

@@ -11,7 +11,7 @@ export function handleVaultCreated(event: VaultCreated): void {
   if (vault == null) {
     vault = new Vault(id)
     vault.address = event.params.vault
-    vault.owner = event.params.owner
+    vault.owner = event.params.user
     vault.createdAtBlock = event.block.number
     vault.createdAtTimestamp = event.block.timestamp
     vault.createdTxHash = event.transaction.hash
