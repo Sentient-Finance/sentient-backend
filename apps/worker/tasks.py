@@ -6,10 +6,12 @@ Import celery_app here (not the other way around) to avoid circular imports.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+import urllib.parse
+import urllib.request
+from datetime import datetime, timedelta, timezone
 
 from redis import Redis
-from sqlalchemy import select
+from sqlalchemy import and_, select
 
 from apps.worker.celery_app import celery_app
 from libs.core.config import get_settings
@@ -37,6 +39,32 @@ def enqueue_execution(vault_address: str, action: str, reason: str) -> dict:
         "status": "queued",
         "queued_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@celery_app.task(name="worker.notify.telegram")
+def notify_telegram(message: str) -> dict:
+    settings = get_settings()
+    if not settings.telegram_bot_token or not settings.telegram_chat_id:
+        return {"status": "skipped", "reason": "telegram_not_configured"}
+
+    base = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
+    payload = urllib.parse.urlencode(
+        {
+            "chat_id": settings.telegram_chat_id,
+            "text": message,
+            "disable_web_page_preview": "true",
+        }
+    ).encode()
+
+    req = urllib.request.Request(base, data=payload, method="POST")
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
+
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            body = r.read().decode("utf-8", errors="ignore")
+        return {"status": "sent", "response": body[:200]}
+    except Exception as exc:
+        return {"status": "failed", "reason": str(exc)}
 
 
 def _latest_event(db, vault_address: str, event_type: str) -> VaultEvent | None:
@@ -127,4 +155,75 @@ def strategy_tick() -> dict:
         "triggered": triggered,
         "skipped": skipped,
         "at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@celery_app.task(name="worker.risk_guard.tick")
+def risk_guard_tick() -> dict:
+    """Risk guard baseline for issue #7.
+
+    Checks:
+    - stale price events
+    - recent failure events (ExecutionFailed / SlippageTooHigh)
+    Sends Telegram alerts with Redis dedupe window.
+    """
+
+    settings = get_settings()
+    session_factory = get_session_factory()
+    redis_client = Redis.from_url(settings.redis_url)
+
+    inspected = 0
+    alerts_sent = 0
+    alerts_skipped = 0
+
+    now = datetime.now(timezone.utc)
+    stale_cutoff = now - timedelta(seconds=settings.stale_price_seconds)
+
+    with session_factory() as db:
+        vaults = db.scalars(select(Vault)).all()
+
+        for vault in vaults:
+            inspected += 1
+
+            # 1) stale oracle/price detection
+            latest_price = _latest_event(db, vault.address, "PriceObserved")
+            if latest_price is not None and latest_price.timestamp < stale_cutoff:
+                key = f"risk_alert:{vault.address}:stale_price"
+                if redis_client.set(key, "1", ex=settings.alert_dedupe_seconds, nx=True):
+                    notify_telegram.delay(
+                        f"⚠️ Stale price detected\nVault: {vault.address}\nLast update: {latest_price.timestamp.isoformat()}"
+                    )
+                    alerts_sent += 1
+                else:
+                    alerts_skipped += 1
+
+            # 2) failure events in recent window
+            recent_fail = db.scalar(
+                select(VaultEvent)
+                .where(
+                    and_(
+                        VaultEvent.vault_address == vault.address,
+                        VaultEvent.event_type.in_(["ExecutionFailed", "SlippageTooHigh", "SwapFailed"]),
+                        VaultEvent.timestamp >= now - timedelta(minutes=30),
+                    )
+                )
+                .order_by(VaultEvent.block_number.desc(), VaultEvent.log_index.desc())
+                .limit(1)
+            )
+
+            if recent_fail is not None:
+                key = f"risk_alert:{vault.address}:{recent_fail.event_type}"
+                if redis_client.set(key, "1", ex=settings.alert_dedupe_seconds, nx=True):
+                    notify_telegram.delay(
+                        f"🚨 Execution risk alert\nVault: {vault.address}\nType: {recent_fail.event_type}\nTx: {recent_fail.tx_hash}"
+                    )
+                    alerts_sent += 1
+                else:
+                    alerts_skipped += 1
+
+    return {
+        "inspected": inspected,
+        "alerts_sent": alerts_sent,
+        "alerts_skipped": alerts_skipped,
+        "at": now.isoformat(),
     }

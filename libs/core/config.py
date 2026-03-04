@@ -68,6 +68,18 @@ class Settings(BaseSettings):
         default=60,
         alias="STRATEGY_TICK_SECONDS",
     )
+    risk_tick_seconds: int = Field(
+        default=60,
+        alias="RISK_TICK_SECONDS",
+    )
+    stale_price_seconds: int = Field(
+        default=180,
+        alias="STALE_PRICE_SECONDS",
+    )
+    alert_dedupe_seconds: int = Field(
+        default=300,
+        alias="ALERT_DEDUPE_SECONDS",
+    )
 
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
 
