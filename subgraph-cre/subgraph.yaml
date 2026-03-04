@@ -52,3 +52,7 @@ templates:
           handler: handleSwapExecuted
         - event: CrossChainShieldTriggered(indexed uint64,indexed address,uint256)
           handler: handleCrossChainShieldTriggered
+        - event: TokenDeposited(indexed address,uint256)
+          handler: handleTokenDeposited
+        - event: TokenWithdrawn(indexed address,uint256)
+          handler: handleTokenWithdrawn

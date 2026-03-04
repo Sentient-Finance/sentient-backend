@@ -3,7 +3,9 @@ import { BigInt, dataSource } from '@graphprotocol/graph-ts'
 import {
   CrossChainShieldTriggered,
   SwapExecuted,
+  TokenDeposited,
   TokenRuleSet,
+  TokenWithdrawn,
   VaultInitialized,
 } from '../generated/templates/PortfolioVault/PortfolioVault'
 import { Vault, VaultEvent } from '../generated/schema'
@@ -97,6 +99,36 @@ export function handleCrossChainShieldTriggered(event: CrossChainShieldTriggered
   e.blockTimestamp = event.block.timestamp
   e.txHash = event.transaction.hash
   e.logIndex = event.logIndex
+  e.amountOut = event.params.amount
+  e.save()
+}
+
+export function handleTokenDeposited(event: TokenDeposited): void {
+  const vault = getOrCreateVault()
+  vault.eventCount = vault.eventCount.plus(BigInt.fromI32(1))
+  vault.save()
+
+  const e = newEventEntity('TokenDeposited', event.transaction.hash.toHexString(), event.logIndex)
+  e.blockNumber = event.block.number
+  e.blockTimestamp = event.block.timestamp
+  e.txHash = event.transaction.hash
+  e.logIndex = event.logIndex
+  e.token = event.params.token
+  e.amountIn = event.params.amount
+  e.save()
+}
+
+export function handleTokenWithdrawn(event: TokenWithdrawn): void {
+  const vault = getOrCreateVault()
+  vault.eventCount = vault.eventCount.plus(BigInt.fromI32(1))
+  vault.save()
+
+  const e = newEventEntity('TokenWithdrawn', event.transaction.hash.toHexString(), event.logIndex)
+  e.blockNumber = event.block.number
+  e.blockTimestamp = event.block.timestamp
+  e.txHash = event.transaction.hash
+  e.logIndex = event.logIndex
+  e.token = event.params.token
   e.amountOut = event.params.amount
   e.save()
 }
