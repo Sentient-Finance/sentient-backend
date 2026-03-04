@@ -81,3 +81,6 @@ indexer:
 worker:
 	$(PY) -m celery -A apps.worker.celery_app worker -l info
 
+beat:
+	$(PY) -m celery -A apps.worker.celery_app beat -l info
+
