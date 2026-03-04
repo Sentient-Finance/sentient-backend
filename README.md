@@ -111,8 +111,10 @@ All routes are prefixed with `/api/v1`.
 | `GET /api/v1/health` | Liveness probe — returns `200` if the process is running |
 | `GET /api/v1/ready` | Readiness probe — returns `200` if DB is reachable, `503` otherwise |
 | `GET /api/v1/vaults` | Vault list (pagination + chain filter) |
-| `GET /api/v1/vault/{address}` | Vault detail |
-| `GET /api/v1/vault/{address}/history` | Vault event history (type/from/to filters) |
+| `GET /api/v1/vaults/{address}` | Vault detail |
+| `GET /api/v1/vaults/{address}/history` | Vault event history (type/from/to filters) |
+| `POST /api/v1/vaults/{address}/action/execute` | Queue CRE execution and dispatch worker |
+| `GET /api/v1/executions/{id}` | Execution status + attempt audit trail |
 
 #### API behavior notes
 
@@ -149,6 +151,9 @@ Copy `.env.example` to `.env` and adjust as needed.
 | `POSTGRES_DB` | `sentient` | Database name |
 | `REDIS_URL` | `redis://127.0.0.1:6379/0` | Redis DSN (broker + backend) |
 | `ETH_RPC_URL` | — | Ethereum JSON-RPC endpoint |
+| `CHAINLINK_CRE_EXECUTE_URL` | — | Chainlink CRE execution API endpoint |
+| `CHAINLINK_CRE_API_KEY` | — | Optional bearer token for CRE API |
+| `CHAINLINK_CRE_TIMEOUT_SECONDS` | `30` | Timeout for CRE API call |
 | `DATABASE_URL` | — | Full DSN override (optional) |
 
 ## Strategy engine tick (Issue #5)

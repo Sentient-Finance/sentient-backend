@@ -34,6 +34,18 @@ class Settings(BaseSettings):
         default=None,
         alias="CHAINLINK_FEED_REGISTRY_ADDRESS",
     )
+    chainlink_cre_execute_url: str | None = Field(
+        default=None,
+        alias="CHAINLINK_CRE_EXECUTE_URL",
+    )
+    chainlink_cre_api_key: str | None = Field(
+        default=None,
+        alias="CHAINLINK_CRE_API_KEY",
+    )
+    chainlink_cre_timeout_seconds: int = Field(
+        default=30,
+        alias="CHAINLINK_CRE_TIMEOUT_SECONDS",
+    )
 
     telegram_bot_token: str | None = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
     telegram_chat_id: str | None = Field(default=None, alias="TELEGRAM_CHAT_ID")

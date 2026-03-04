@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Generic, Literal, TypeVar
 from uuid import uuid4
 
@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
+from apps.worker.tasks import process_execution
 from libs.db.models import ExecutionRequest, Vault, VaultEvent
 from libs.db.session import get_db
 
@@ -86,19 +87,6 @@ class ExecuteActionResponse(BaseModel):
     vault_address: str
     action: str
     queued_at: datetime
-
-
-class ExecutionStatusResponse(BaseModel):
-    execution_id: int
-    chain_id: int
-    vault_address: str
-    action: str
-    status: str
-    reason: str | None
-    tx_hash: str | None
-    error_message: str | None
-    created_at: datetime
-    updated_at: datetime
 
 
 def normalize_address(address: str) -> str:
@@ -287,6 +275,14 @@ def get_vault(
         409: {"description": "Duplicate idempotency key"},
     },
 )
+@router.post(
+    "/vault/{address}/action/execute",
+    response_model=ExecuteActionResponse,
+    responses={
+        404: {"description": "Vault not found"},
+        409: {"description": "Duplicate idempotency key"},
+    },
+)
 def execute_vault_action(
     body: ExecuteActionRequest,
     address: str = address_param(),
@@ -325,6 +321,8 @@ def execute_vault_action(
     db.commit()
     db.refresh(row)
 
+    process_execution.delay(row.id)
+
     return ExecuteActionResponse(
         execution_id=row.id,
         status=row.status,
@@ -334,30 +332,3 @@ def execute_vault_action(
     )
 
 
-@router.get(
-    "/executions/{execution_id}",
-    response_model=ExecutionStatusResponse,
-    responses={404: {"description": "Execution not found"}},
-)
-def get_execution_status(
-    execution_id: int,
-    db: Session = Depends(get_db),
-):
-    row = db.scalar(
-        select(ExecutionRequest).where(ExecutionRequest.id == execution_id).limit(1)
-    )
-    if row is None:
-        raise HTTPException(status_code=404, detail="execution not found")
-
-    return ExecutionStatusResponse(
-        execution_id=row.id,
-        chain_id=row.chain_id,
-        vault_address=row.vault_address,
-        action=row.action,
-        status=row.status,
-        reason=row.reason,
-        tx_hash=row.tx_hash,
-        error_message=row.error_message,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
-    )

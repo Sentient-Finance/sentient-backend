@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from apps.api.v1.routes.executions import router as executions_router
 from apps.api.v1.routes.vaults import router as vaults_router
 from libs.db.session import get_db
 
@@ -16,4 +17,5 @@ def ready(db: Session = Depends(get_db)):
     return {"ok": True, "service": "api", "ready": True}
 
 router.include_router(vaults_router)
+router.include_router(executions_router)
 
