@@ -173,7 +173,13 @@ Status endpoint:
 - `GET /v1/vaults/executions/{execution_id}`
 
 Current status flow:
-- `queued` (CRE submit/confirm is implemented in the next phase)
+- `queued -> submitted -> confirmed | failed`
+
+CRE config (optional):
+- `CRE_EXECUTOR_URL`
+- `CRE_EXECUTOR_TOKEN`
+
+If CRE URL is missing, execution runs in mock mode with deterministic fake tx hash.
 
 ## CI
 
