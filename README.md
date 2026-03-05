@@ -156,3 +156,14 @@ Copy `.env.example` to `.env` and adjust as needed.
 Workflow: `.github/workflows/openclaw-bridge.yml`
 
 Required secrets: `OPENCLAW_HOOK_URL`, `OPENCLAW_HOOK_TOKEN`
+
+## PR title convention check
+
+GitHub Action: `.github/workflows/pr-title-lint.yml`
+
+Expected pull request title format:
+
+`ISSUE #<number> - <type>: <description>`
+
+Allowed `<type>` values:
+`feat`, `fix`, `refactor`, `docs`, `style`, `test`, `chore`, `ci`.

@@ -1,0 +1,23 @@
+name: PR Title Lint
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  title-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR title format
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          echo "PR title: $PR_TITLE"
+          if echo "$PR_TITLE" | grep -Eq '^ISSUE #[0-9]+ - (feat|fix|refactor|docs|style|test|chore|ci): .+'; then
+            echo "✅ PR title format is valid"
+            exit 0
+          fi
+
+          echo "❌ Invalid PR title format"
+          echo "Expected: ISSUE #<number> - <type>: <description>"
+          exit 1
