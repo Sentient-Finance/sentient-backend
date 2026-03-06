@@ -17,12 +17,6 @@ from libs.core.strategy import StrategyRule, evaluate_rule
 from libs.db.models import Vault, VaultEvent
 from libs.db.session import get_session_factory
 
-
-@celery_app.task(name="worker.ping")
-def ping() -> str:
-    return "pong"
-
-
 @celery_app.task(name="worker.execution.enqueue")
 def enqueue_execution(vault_address: str, action: str, reason: str) -> dict:
     """Placeholder execution enqueue task.
