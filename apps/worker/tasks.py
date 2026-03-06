@@ -160,13 +160,7 @@ def strategy_tick() -> dict:
 
 @celery_app.task(name="worker.risk_guard.tick")
 def risk_guard_tick() -> dict:
-    """Risk guard baseline for issue #7.
-
-    Checks:
-    - stale price events
-    - recent failure events (ExecutionFailed / SlippageTooHigh)
-    Sends Telegram alerts with Redis dedupe window.
-    """
+    """Sends Telegram alert when price hits buy/sell threshold."""
 
     settings = get_settings()
     session_factory = get_session_factory()
@@ -177,7 +171,6 @@ def risk_guard_tick() -> dict:
     alerts_skipped = 0
 
     now = datetime.now(timezone.utc)
-    stale_cutoff = now - timedelta(seconds=settings.stale_price_seconds)
 
     with session_factory() as db:
         vaults = db.scalars(select(Vault)).all()
@@ -185,37 +178,38 @@ def risk_guard_tick() -> dict:
         for vault in vaults:
             inspected += 1
 
-            # 1) stale oracle/price detection
-            latest_price = _latest_event(db, vault.address, "PriceObserved")
-            if latest_price is not None and latest_price.timestamp < stale_cutoff:
-                key = f"risk_alert:{vault.address}:stale_price"
+            rule_event = _latest_event(db, vault.address, "TokenRuleSet")
+            price_event = _latest_event(db, vault.address, "PriceObserved")
+
+            if rule_event is None or price_event is None:
+                continue
+
+            try:
+                rule_payload = rule_event.payload_json if isinstance(rule_event.payload_json, dict) else json.loads(rule_event.payload_json)
+                price_payload = price_event.payload_json if isinstance(price_event.payload_json, dict) else json.loads(price_event.payload_json)
+                buy_threshold = rule_payload.get("buy_threshold")
+                sell_threshold = rule_payload.get("sell_threshold")
+                current_price = float(price_payload.get("price", 0))
+            except Exception:
+                continue
+
+            if current_price <= 0:
+                continue
+
+            if buy_threshold is not None and current_price <= float(buy_threshold):
+                key = f"risk_alert:{vault.address}:price_buy_threshold"
                 if redis_client.set(key, "1", ex=settings.alert_dedupe_seconds, nx=True):
                     notify_telegram.delay(
-                        f"⚠️ Stale price detected\nVault: {vault.address}\nLast update: {latest_price.timestamp.isoformat()}"
+                        f"📉 Price hit BUY threshold\nVault: {vault.address}\nPrice: {current_price}\nThreshold: {buy_threshold}"
                     )
                     alerts_sent += 1
                 else:
                     alerts_skipped += 1
-
-            # 2) failure events in recent window
-            recent_fail = db.scalar(
-                select(VaultEvent)
-                .where(
-                    and_(
-                        VaultEvent.vault_address == vault.address,
-                        VaultEvent.event_type.in_(["ExecutionFailed", "SlippageTooHigh", "SwapFailed"]),
-                        VaultEvent.timestamp >= now - timedelta(minutes=30),
-                    )
-                )
-                .order_by(VaultEvent.block_number.desc(), VaultEvent.log_index.desc())
-                .limit(1)
-            )
-
-            if recent_fail is not None:
-                key = f"risk_alert:{vault.address}:{recent_fail.event_type}"
+            elif sell_threshold is not None and current_price >= float(sell_threshold):
+                key = f"risk_alert:{vault.address}:price_sell_threshold"
                 if redis_client.set(key, "1", ex=settings.alert_dedupe_seconds, nx=True):
                     notify_telegram.delay(
-                        f"🚨 Execution risk alert\nVault: {vault.address}\nType: {recent_fail.event_type}\nTx: {recent_fail.tx_hash}"
+                        f"📈 Price hit SELL threshold\nVault: {vault.address}\nPrice: {current_price}\nThreshold: {sell_threshold}"
                     )
                     alerts_sent += 1
                 else:
