@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+      - name: Ruff
+        run: ruff check .
+      - name: Black (check)
+        run: black --check .
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+      - name: Run tests
+        run: pytest
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Install build tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+      - name: Python package build
+        run: python -m build
+      - name: Docker image build
+        run: docker build -t sentient-backend:ci .
+
+  health-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      - name: Prepare env
+        run: cp .env.example .env
+      - name: Start infra
+        run: docker compose -f infra/docker-compose.yml up -d
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+      - name: Run migrations
+        run: python -m alembic upgrade head
+      - name: Start API
+        run: |
+          nohup uvicorn apps.api.app.main:app --host 127.0.0.1 --port 8000 > /tmp/api.log 2>&1 &
+      - name: Wait for /health
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:8000/health >/dev/null; then
+              echo "health ok" && break
+            fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:8000/health
+      - name: Check /ready
+        run: curl -fsS http://127.0.0.1:8000/api/v1/ready
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          echo '--- API LOG ---'
+          cat /tmp/api.log || true
+          echo '--- DOCKER PS ---'
+          docker ps -a
+          echo '--- COMPOSE LOGS ---'
+          docker compose -f infra/docker-compose.yml logs --no-color || true
+      - name: Teardown
+        if: always()
+        run: docker compose -f infra/docker-compose.yml down -v

@@ -153,9 +153,14 @@ Copy `.env.example` to `.env` and adjust as needed.
 
 ## CI
 
-Workflow: `.github/workflows/openclaw-bridge.yml`
+- Main CI workflow: `.github/workflows/ci.yml`
+  - `lint` (ruff + black --check)
+  - `test` (pytest)
+  - `build` (python package build + docker build)
+  - `health-check` (docker infra + alembic migrate + `/health` + `/api/v1/ready`)
 
-Required secrets: `OPENCLAW_HOOK_URL`, `OPENCLAW_HOOK_TOKEN`
+- OpenClaw bridge workflow: `.github/workflows/openclaw-bridge.yml`
+  - Required secrets: `OPENCLAW_HOOK_URL`, `OPENCLAW_HOOK_TOKEN`
 
 ## PR title convention check
 
