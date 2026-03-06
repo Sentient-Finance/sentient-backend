@@ -35,13 +35,18 @@ def process_execution(self, execution_id: int) -> str:
             return "missing"
 
         attempt_no = next_attempt_number(db, execution_id)
+        metadata = execution.metadata_json or {}
+        swap = metadata.get("swap") if isinstance(metadata.get("swap"), dict) else None
+
         payload = {
             "chainId": execution.chain_id,
             "vaultAddress": execution.vault_address,
             "action": execution.action,
             "reason": execution.reason,
-            "metadata": execution.metadata_json or {},
+            "metadata": metadata,
         }
+        if swap is not None:
+            payload["swap"] = swap
 
         mark_execution_status(execution, status="submitted")
         create_execution_attempt(
@@ -60,7 +65,8 @@ def process_execution(self, execution_id: int) -> str:
                 vault_address=execution.vault_address,
                 action=execution.action,
                 reason=execution.reason,
-                metadata=execution.metadata_json or {},
+                metadata=metadata,
+                swap=swap,
             )
 
             final_status = "confirmed" if result.tx_hash else "submitted"

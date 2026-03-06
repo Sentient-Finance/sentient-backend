@@ -75,10 +75,21 @@ class HistoryItem(BaseModel):
     payload_json: dict[str, Any]
 
 
+class ExecuteSwapParams(BaseModel):
+    tokenIn: str = Field(pattern=r"^0x[a-fA-F0-9]{40}$")
+    tokenOut: str = Field(pattern=r"^0x[a-fA-F0-9]{40}$")
+    amountIn: str
+    amountOutMinimum: str
+    currentPrice: str
+    router: str = Field(pattern=r"^0x[a-fA-F0-9]{40}$")
+    fee: int = Field(ge=0, le=1_000_000)
+
+
 class ExecuteActionRequest(BaseModel):
-    action: Literal["buy", "sell", "pause", "shield"] = "buy"
+    action: Literal["buy", "sell", "pause", "shield", "rebalance", "custom", "swap"] = "buy"
     reason: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+    swap: ExecuteSwapParams | None = None
 
 
 class ExecuteActionResponse(BaseModel):
@@ -300,6 +311,9 @@ def execute_vault_action(
     if vault is None:
         raise HTTPException(status_code=404, detail="vault not found")
 
+    if body.action == "swap" and body.swap is None:
+        raise HTTPException(status_code=422, detail="swap params required when action=swap")
+
     idem = idempotency_key or f"exec:{vault.chain_id}:{normalized}:{body.action}:{uuid4().hex[:12]}"
 
     existing = db.scalar(
@@ -308,6 +322,10 @@ def execute_vault_action(
     if existing is not None:
         raise HTTPException(status_code=409, detail="duplicate idempotency key")
 
+    payload_metadata = dict(body.metadata)
+    if body.swap is not None:
+        payload_metadata["swap"] = body.swap.model_dump()
+
     row = ExecutionRequest(
         chain_id=vault.chain_id,
         vault_address=vault.address,
@@ -315,7 +333,7 @@ def execute_vault_action(
         reason=body.reason,
         status="queued",
         idempotency_key=idem,
-        metadata_json=body.metadata,
+        metadata_json=payload_metadata,
     )
     db.add(row)
     db.commit()

@@ -54,17 +54,21 @@ class ChainlinkCreClient:
         action: str,
         reason: str | None,
         metadata: dict[str, Any],
+        swap: dict[str, Any] | None = None,
     ) -> CreSubmitResult:
         if not self._settings.chainlink_cre_execute_url:
             raise CreClientError("CHAINLINK_CRE_EXECUTE_URL is not configured")
 
-        payload = {
+        payload: dict[str, Any] = {
             "chainId": chain_id,
             "vaultAddress": vault_address,
             "action": action,
             "reason": reason,
             "metadata": metadata,
         }
+        if swap is not None:
+            payload["swap"] = swap
+
         data = self._call_json(self._settings.chainlink_cre_execute_url, payload)
         return CreSubmitResult(
             external_execution_id=data.get("executionId"),

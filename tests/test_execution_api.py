@@ -62,6 +62,22 @@ def test_execute_and_fetch_status(monkeypatch):
     assert payload["attempts"] == []
 
 
+def test_swap_requires_swap_payload(monkeypatch):
+    app, SessionLocal = build_client()
+    monkeypatch.setattr("apps.api.v1.routes.vaults.process_execution", DummyTask())
+
+    with SessionLocal() as db:
+        db.add(Vault(chain_id=84532, address="0x3333333333333333333333333333333333333333"))
+        db.commit()
+
+    client = TestClient(app)
+    res = client.post(
+        "/api/v1/vaults/0x3333333333333333333333333333333333333333/action/execute",
+        json={"action": "swap"},
+    )
+    assert res.status_code == 422
+
+
 def test_duplicate_idempotency_key_returns_409(monkeypatch):
     app, SessionLocal = build_client()
     monkeypatch.setattr("apps.api.v1.routes.vaults.process_execution", DummyTask())
