@@ -87,3 +87,5 @@ beat:
 test:
 	$(PY) -m pytest
 
+test-noti:
+	$(PY) -c "from apps.worker.tasks import risk_guard_tick; print(risk_guard_tick())"
