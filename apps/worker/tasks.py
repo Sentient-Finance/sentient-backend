@@ -49,7 +49,7 @@ def process_execution(self, execution_id: int) -> str:
             payload["swap"] = swap
 
         mark_execution_status(execution, status="submitted")
-        create_execution_attempt(
+        attempt = create_execution_attempt(
             db,
             execution=execution,
             attempt_number=attempt_no,
@@ -77,14 +77,9 @@ def process_execution(self, execution_id: int) -> str:
                 external_execution_id=result.external_execution_id,
                 error_message=None,
             )
-            create_execution_attempt(
-                db,
-                execution=execution,
-                attempt_number=attempt_no,
-                status=final_status,
-                request_json=payload,
-                response_json=result.raw_response,
-            )
+            attempt.status = final_status
+            attempt.response_json = result.raw_response
+            attempt.error_message = None
             db.commit()
             return final_status
         except CreClientError as exc:
@@ -93,14 +88,8 @@ def process_execution(self, execution_id: int) -> str:
             status = "dead_letter" if final_failure else "queued"
 
             mark_execution_status(execution, status=status, error_message=str(exc))
-            create_execution_attempt(
-                db,
-                execution=execution,
-                attempt_number=attempt_no,
-                status="failed",
-                request_json=payload,
-                error_message=str(exc),
-            )
+            attempt.status = "failed"
+            attempt.error_message = str(exc)
             db.commit()
 
             if final_failure:
