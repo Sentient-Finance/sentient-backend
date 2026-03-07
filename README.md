@@ -154,7 +154,8 @@ Copy `.env.example` to `.env` and adjust as needed.
 | `CHAINLINK_CRE_EXECUTE_URL` | — | Chainlink CRE execution API endpoint |
 | `CHAINLINK_CRE_API_KEY` | — | Optional bearer token for CRE API |
 | `CHAINLINK_CRE_TIMEOUT_SECONDS` | `30` | Timeout for CRE API call |
-| `CHAINLINK_CCIP_CHAINS_JSON` | — | JSON map for CCIP source/destination validation (shield action) |
+| `CHAINLINK_CCIP_CHAINS_JSON` | — | Inline JSON map for CCIP source/destination validation (shield action) |
+| `CHAINLINK_CCIP_CHAINS_FILE` | — | Path to JSON file for CCIP chain map (preferred when config grows) |
 | `DATABASE_URL` | — | Full DSN override (optional) |
 
 ## Strategy engine tick (Issue #5)

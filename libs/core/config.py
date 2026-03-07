@@ -52,6 +52,10 @@ class Settings(BaseSettings):
         default=None,
         alias="CHAINLINK_CCIP_CHAINS_JSON",
     )
+    chainlink_ccip_chains_file: str | None = Field(
+        default=None,
+        alias="CHAINLINK_CCIP_CHAINS_FILE",
+    )
 
     telegram_bot_token: str | None = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
     telegram_chat_id: str | None = Field(default=None, alias="TELEGRAM_CHAT_ID")
@@ -86,10 +90,17 @@ class Settings(BaseSettings):
 
     @property
     def ccip_chain_map(self) -> dict[str, dict[str, Any]]:
-        if not self.chainlink_ccip_chains_json:
+        raw = self.chainlink_ccip_chains_json
+        if not raw and self.chainlink_ccip_chains_file:
+            try:
+                with open(self.chainlink_ccip_chains_file, "r", encoding="utf-8") as f:
+                    raw = f.read()
+            except Exception:
+                return {}
+        if not raw:
             return {}
         try:
-            parsed = json.loads(self.chainlink_ccip_chains_json)
+            parsed = json.loads(raw)
         except Exception:
             return {}
         return parsed if isinstance(parsed, dict) else {}

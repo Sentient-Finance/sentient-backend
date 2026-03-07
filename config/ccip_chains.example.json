@@ -1,0 +1,9 @@
+{
+  "84532": {
+    "router": "0xSOURCE_ROUTER_BASE_SEPOLIA",
+    "linkToken": "0xSOURCE_LINK_BASE_SEPOLIA"
+  },
+  "ethereum-testnet-sepolia-1": {
+    "selector": "16015286601757825753"
+  }
+}
