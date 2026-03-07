@@ -1,0 +1,45 @@
+type DefaultsUpdated @entity(immutable: true) {
+  id: Bytes!
+  maxTradeAmount: BigInt! # uint256
+  cooldownPeriod: BigInt! # uint256
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+type ExecutorUpdated @entity(immutable: true) {
+  id: Bytes!
+  oldExecutor: Bytes! # address
+  newExecutor: Bytes! # address
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+type OwnershipTransferred @entity(immutable: true) {
+  id: Bytes!
+  previousOwner: Bytes! # address
+  newOwner: Bytes! # address
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+type RelayerUpdated @entity(immutable: true) {
+  id: Bytes!
+  oldRelayer: Bytes! # address
+  newRelayer: Bytes! # address
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}
+
+type VaultCreated @entity(immutable: true) {
+  id: Bytes!
+  user: Bytes! # address
+  vault: Bytes! # address
+  vaultIndex: BigInt! # uint256
+  blockNumber: BigInt!
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
+}

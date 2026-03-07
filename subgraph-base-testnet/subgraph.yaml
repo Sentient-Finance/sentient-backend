@@ -1,0 +1,38 @@
+specVersion: 1.3.0
+indexerHints:
+  prune: auto
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: VaultFactory
+    network: base-sepolia
+    source:
+      address: "0xb66507Fe3a9940A25BA2D98ad8637F7993F768Ba"
+      abi: VaultFactory
+      startBlock: 38568500
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - DefaultsUpdated
+        - ExecutorUpdated
+        - OwnershipTransferred
+        - RelayerUpdated
+        - VaultCreated
+      abis:
+        - name: VaultFactory
+          file: ./abis/VaultFactory.json
+      eventHandlers:
+        - event: DefaultsUpdated(uint256,uint256)
+          handler: handleDefaultsUpdated
+        - event: ExecutorUpdated(indexed address,indexed address)
+          handler: handleExecutorUpdated
+        - event: OwnershipTransferred(indexed address,indexed address)
+          handler: handleOwnershipTransferred
+        - event: RelayerUpdated(indexed address,indexed address)
+          handler: handleRelayerUpdated
+        - event: VaultCreated(indexed address,indexed address,uint256)
+          handler: handleVaultCreated
+      file: ./src/vault-factory.ts
