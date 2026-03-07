@@ -17,6 +17,16 @@ def make_celery() -> Celery:
         accept_content=["json"],
         timezone="UTC",
         enable_utc=True,
+        beat_schedule={
+            "strategy-tick": {
+                "task": "worker.strategy.tick",
+                "schedule": settings.strategy_tick_seconds,
+            },
+            "risk-guard-tick": {
+                "task": "worker.risk_guard.tick",
+                "schedule": settings.risk_tick_seconds,
+            },
+        },
     )
     return app
 
