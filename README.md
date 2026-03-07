@@ -154,6 +154,7 @@ Copy `.env.example` to `.env` and adjust as needed.
 | `CHAINLINK_CRE_EXECUTE_URL` | — | Chainlink CRE execution API endpoint |
 | `CHAINLINK_CRE_API_KEY` | — | Optional bearer token for CRE API |
 | `CHAINLINK_CRE_TIMEOUT_SECONDS` | `30` | Timeout for CRE API call |
+| `CHAINLINK_CCIP_CHAINS_JSON` | — | JSON map for CCIP source/destination validation (shield action) |
 | `DATABASE_URL` | — | Full DSN override (optional) |
 
 ## Strategy engine tick (Issue #5)
@@ -168,17 +169,22 @@ If threshold + cooldown checks pass, it enqueues `worker.execution.enqueue` with
 - key format: `strategy:{vault}:{action}:{YYYYMMDDHHMM}`
 - lock TTL: 90 seconds
 
-## Execution API baseline (Issue #6)
+## Execution API (Issue #6)
 
 Write endpoint:
-- `POST /v1/vaults/{address}/action/execute`
+- `POST /api/v1/vaults/{address}/action/execute`
   - optional header: `Idempotency-Key`
+  - supports `action=swap` with `swap` payload
+  - supports `action=shield` with `shield` payload (CCIP validation)
 
 Status endpoint:
-- `GET /v1/vaults/executions/{execution_id}`
+- `GET /api/v1/executions/{execution_id}`
 
-Current status flow:
-- `queued` (CRE submit/confirm is implemented in the next phase)
+Lifecycle:
+- `queued -> submitted -> confirmed | dead_letter`
+
+For `action=shield`, backend validates source/destination CCIP metadata from
+`CHAINLINK_CCIP_CHAINS_JSON` before enqueueing execution.
 
 ## CI
 

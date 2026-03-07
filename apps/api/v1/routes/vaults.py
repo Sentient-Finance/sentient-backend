@@ -10,6 +10,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from apps.worker.tasks import process_execution
+from libs.core.config import get_settings
 from libs.db.models import ExecutionRequest, Vault, VaultEvent
 from libs.db.session import get_db
 
@@ -85,11 +86,19 @@ class ExecuteSwapParams(BaseModel):
     fee: int = Field(ge=0, le=1_000_000)
 
 
+class ExecuteShieldParams(BaseModel):
+    destinationChain: str
+    receiver: str = Field(pattern=r"^0x[a-fA-F0-9]{40}$")
+    tokenToShield: str = Field(pattern=r"^0x[a-fA-F0-9]{40}$")
+    amount: str
+
+
 class ExecuteActionRequest(BaseModel):
     action: Literal["buy", "sell", "pause", "shield", "rebalance", "custom", "swap"] = "buy"
     reason: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     swap: ExecuteSwapParams | None = None
+    shield: ExecuteShieldParams | None = None
 
 
 class ExecuteActionResponse(BaseModel):
@@ -314,6 +323,27 @@ def execute_vault_action(
     if body.action == "swap" and body.swap is None:
         raise HTTPException(status_code=422, detail="swap params required when action=swap")
 
+    if body.action == "shield":
+        if body.shield is None:
+            raise HTTPException(status_code=422, detail="shield params required when action=shield")
+
+        settings = get_settings()
+        chain_cfg = settings.ccip_chain_map
+        source_key = str(vault.chain_id)
+        source_cfg = chain_cfg.get(source_key, {})
+        if not source_cfg.get("router") or not source_cfg.get("linkToken"):
+            raise HTTPException(
+                status_code=422,
+                detail=f"ccip source chain config missing for chain {vault.chain_id}",
+            )
+
+        dest_cfg = chain_cfg.get(body.shield.destinationChain)
+        if not isinstance(dest_cfg, dict) or not dest_cfg.get("selector"):
+            raise HTTPException(
+                status_code=422,
+                detail=f"unknown destinationChain '{body.shield.destinationChain}'",
+            )
+
     idem = idempotency_key or f"exec:{vault.chain_id}:{normalized}:{body.action}:{uuid4().hex[:12]}"
 
     existing = db.scalar(
@@ -325,6 +355,16 @@ def execute_vault_action(
     payload_metadata = dict(body.metadata)
     if body.swap is not None:
         payload_metadata["swap"] = body.swap.model_dump()
+    if body.shield is not None:
+        settings = get_settings()
+        chain_cfg = settings.ccip_chain_map
+        source_cfg = chain_cfg.get(str(vault.chain_id), {})
+        dest_cfg = chain_cfg.get(body.shield.destinationChain, {})
+        shield_payload = body.shield.model_dump()
+        shield_payload["destinationChainSelector"] = str(dest_cfg.get("selector"))
+        shield_payload["sourceRouter"] = source_cfg.get("router")
+        shield_payload["sourceLinkToken"] = source_cfg.get("linkToken")
+        payload_metadata["shield"] = shield_payload
 
     row = ExecutionRequest(
         chain_id=vault.chain_id,

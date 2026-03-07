@@ -37,6 +37,7 @@ def process_execution(self, execution_id: int) -> str:
         attempt_no = next_attempt_number(db, execution_id)
         metadata = execution.metadata_json or {}
         swap = metadata.get("swap") if isinstance(metadata.get("swap"), dict) else None
+        shield = metadata.get("shield") if isinstance(metadata.get("shield"), dict) else None
 
         payload = {
             "chainId": execution.chain_id,
@@ -47,6 +48,8 @@ def process_execution(self, execution_id: int) -> str:
         }
         if swap is not None:
             payload["swap"] = swap
+        if shield is not None:
+            payload["shield"] = shield
 
         mark_execution_status(execution, status="submitted")
         attempt = create_execution_attempt(
@@ -67,6 +70,7 @@ def process_execution(self, execution_id: int) -> str:
                 reason=execution.reason,
                 metadata=metadata,
                 swap=swap,
+                shield=shield,
             )
 
             final_status = "confirmed" if result.tx_hash else "submitted"

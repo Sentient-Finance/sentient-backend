@@ -1,4 +1,6 @@
+import json
 from functools import lru_cache
+from typing import Any
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -46,6 +48,10 @@ class Settings(BaseSettings):
         default=30,
         alias="CHAINLINK_CRE_TIMEOUT_SECONDS",
     )
+    chainlink_ccip_chains_json: str | None = Field(
+        default=None,
+        alias="CHAINLINK_CCIP_CHAINS_JSON",
+    )
 
     telegram_bot_token: str | None = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
     telegram_chat_id: str | None = Field(default=None, alias="TELEGRAM_CHAT_ID")
@@ -77,6 +83,16 @@ class Settings(BaseSettings):
     )
 
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
+
+    @property
+    def ccip_chain_map(self) -> dict[str, dict[str, Any]]:
+        if not self.chainlink_ccip_chains_json:
+            return {}
+        try:
+            parsed = json.loads(self.chainlink_ccip_chains_json)
+        except Exception:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
 
     @property
     def sqlalchemy_database_uri(self) -> str:
