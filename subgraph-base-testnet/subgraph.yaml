@@ -1,0 +1,58 @@
+specVersion: 1.3.0
+indexerHints:
+  prune: auto
+schema:
+  file: ./schema.graphql
+
+dataSources:
+  - kind: ethereum
+    name: VaultFactory
+    network: base-sepolia
+    source:
+      address: "0xb66507Fe3a9940A25BA2D98ad8637F7993F768Ba"
+      abi: VaultFactory
+      startBlock: 38568500
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      file: ./src/factory.ts
+      entities:
+        - Vault
+      abis:
+        - name: VaultFactory
+          file: ./abis/VaultFactory.json
+      eventHandlers:
+        - event: VaultCreated(indexed address,indexed address,uint256)
+          handler: handleVaultCreated
+
+templates:
+  - kind: ethereum
+    name: PortfolioVault
+    network: base-sepolia
+    source:
+      abi: PortfolioVault
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      file: ./src/vault.ts
+      entities:
+        - Vault
+        - VaultEvent
+      abis:
+        - name: PortfolioVault
+          file: ./abis/PortfolioVault.json
+      eventHandlers:
+        - event: VaultInitialized(indexed address,indexed address)
+          handler: handleVaultInitialized
+        - event: TokenRuleSet(indexed address,bool,uint256,uint256,uint256)
+          handler: handleTokenRuleSet
+        - event: SwapExecuted(indexed address,indexed address,uint256,uint256,uint256)
+          handler: handleSwapExecuted
+        - event: CrossChainShieldTriggered(indexed uint64,indexed address,uint256)
+          handler: handleCrossChainShieldTriggered
+        - event: TokenDeposited(indexed address,uint256)
+          handler: handleTokenDeposited
+        - event: TokenWithdrawn(indexed address,uint256)
+          handler: handleTokenWithdrawn
