@@ -84,3 +84,8 @@ worker:
 beat:
 	$(PY) -m celery -A apps.worker.celery_app beat -l info
 
+test:
+	$(PY) -m pytest
+
+test-noti:
+	$(PY) -c "from apps.worker.tasks import risk_guard_tick; print(risk_guard_tick())"

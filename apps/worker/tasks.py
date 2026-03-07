@@ -6,10 +6,12 @@ Import celery_app here (not the other way around) to avoid circular imports.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+import urllib.parse
+import urllib.request
+from datetime import datetime, timedelta, timezone
 
 from redis import Redis
-from sqlalchemy import select
+from sqlalchemy import and_, select
 
 from apps.worker.celery_app import celery_app
 from libs.core.config import get_settings
@@ -31,6 +33,32 @@ def enqueue_execution(vault_address: str, action: str, reason: str) -> dict:
         "status": "queued",
         "queued_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@celery_app.task(name="worker.notify.telegram")
+def notify_telegram(message: str) -> dict:
+    settings = get_settings()
+    if not settings.telegram_bot_token or not settings.telegram_chat_id:
+        return {"status": "skipped", "reason": "telegram_not_configured"}
+
+    base = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
+    payload = urllib.parse.urlencode(
+        {
+            "chat_id": settings.telegram_chat_id,
+            "text": message,
+            "disable_web_page_preview": "true",
+        }
+    ).encode()
+
+    req = urllib.request.Request(base, data=payload, method="POST")
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
+
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            body = r.read().decode("utf-8", errors="ignore")
+        return {"status": "sent", "response": body[:200]}
+    except Exception as exc:
+        return {"status": "failed", "reason": str(exc)}
 
 
 def _latest_event(db, vault_address: str, event_type: str) -> VaultEvent | None:
@@ -121,4 +149,69 @@ def strategy_tick() -> dict:
         "triggered": triggered,
         "skipped": skipped,
         "at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@celery_app.task(name="worker.risk_guard.tick")
+def risk_guard_tick() -> dict:
+    """Sends Telegram alert when price hits buy/sell threshold."""
+
+    settings = get_settings()
+    session_factory = get_session_factory()
+    redis_client = Redis.from_url(settings.redis_url)
+
+    inspected = 0
+    alerts_sent = 0
+    alerts_skipped = 0
+
+    now = datetime.now(timezone.utc)
+
+    with session_factory() as db:
+        vaults = db.scalars(select(Vault)).all()
+
+        for vault in vaults:
+            inspected += 1
+
+            rule_event = _latest_event(db, vault.address, "TokenRuleSet")
+            price_event = _latest_event(db, vault.address, "PriceObserved")
+
+            if rule_event is None or price_event is None:
+                continue
+
+            try:
+                rule_payload = rule_event.payload_json if isinstance(rule_event.payload_json, dict) else json.loads(rule_event.payload_json)
+                price_payload = price_event.payload_json if isinstance(price_event.payload_json, dict) else json.loads(price_event.payload_json)
+                buy_threshold = rule_payload.get("buy_threshold")
+                sell_threshold = rule_payload.get("sell_threshold")
+                current_price = float(price_payload.get("price", 0))
+            except Exception:
+                continue
+
+            if current_price <= 0:
+                continue
+
+            if buy_threshold is not None and current_price <= float(buy_threshold):
+                key = f"risk_alert:{vault.address}:price_buy_threshold"
+                if redis_client.set(key, "1", ex=settings.alert_dedupe_seconds, nx=True):
+                    notify_telegram.delay(
+                        f"📉 Price hit BUY threshold\nVault: {vault.address}\nPrice: {current_price}\nThreshold: {buy_threshold}"
+                    )
+                    alerts_sent += 1
+                else:
+                    alerts_skipped += 1
+            elif sell_threshold is not None and current_price >= float(sell_threshold):
+                key = f"risk_alert:{vault.address}:price_sell_threshold"
+                if redis_client.set(key, "1", ex=settings.alert_dedupe_seconds, nx=True):
+                    notify_telegram.delay(
+                        f"📈 Price hit SELL threshold\nVault: {vault.address}\nPrice: {current_price}\nThreshold: {sell_threshold}"
+                    )
+                    alerts_sent += 1
+                else:
+                    alerts_skipped += 1
+
+    return {
+        "inspected": inspected,
+        "alerts_sent": alerts_sent,
+        "alerts_skipped": alerts_skipped,
+        "at": now.isoformat(),
     }
