@@ -46,6 +46,7 @@ class PaginatedResponse(BaseModel, Generic[T]):
 class VaultListItem(BaseModel):
     chain_id: int
     address: str
+    owner: str | None = None
     created_block_number: int | None
     created_tx_hash: str | None
     created_timestamp: datetime | None
@@ -54,6 +55,7 @@ class VaultListItem(BaseModel):
 class VaultDetail(BaseModel):
     chain_id: int
     address: str
+    owner: str | None = None
     created_block_number: int | None
     created_tx_hash: str | None
     created_timestamp: datetime | None
@@ -84,6 +86,7 @@ def address_param() -> str:
 @router.get("", response_model=PaginatedResponse[VaultListItem])
 def list_vaults(
     chain_id: int | None = Query(default=84532, alias="chain"),
+    owner: str | None = Query(default=None, description="Filter by vault owner (wallet address)"),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -91,6 +94,9 @@ def list_vaults(
     filters = []
     if chain_id is not None:
         filters.append(Vault.chain_id == chain_id)
+    if owner is not None and owner.strip():
+        owner_norm = normalize_address(owner.strip())
+        filters.append(func.lower(Vault.owner) == owner_norm)
 
     count_stmt = select(func.count()).select_from(Vault)
     data_stmt = select(Vault).order_by(Vault.id.desc()).offset(offset).limit(limit)
@@ -110,6 +116,7 @@ def list_vaults(
             VaultListItem(
                 chain_id=row.chain_id,
                 address=row.address,
+                owner=row.owner,
                 created_block_number=row.created_block_number,
                 created_tx_hash=row.created_tx_hash,
                 created_timestamp=row.created_timestamp,
@@ -242,6 +249,7 @@ def get_vault(
     return VaultDetail(
         chain_id=vault.chain_id,
         address=vault.address,
+        owner=vault.owner,
         created_block_number=vault.created_block_number,
         created_tx_hash=vault.created_tx_hash,
         created_timestamp=vault.created_timestamp,

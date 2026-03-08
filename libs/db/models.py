@@ -25,6 +25,7 @@ class Vault(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     chain_id: Mapped[int] = mapped_column(Integer, index=True)
     address: Mapped[str] = mapped_column(String(64), index=True)
+    owner: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
     created_block_number: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_tx_hash: Mapped[str | None] = mapped_column(String(80), nullable=True)
     created_timestamp: Mapped[datetime | None] = mapped_column(
