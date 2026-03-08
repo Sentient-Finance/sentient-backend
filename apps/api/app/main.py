@@ -29,7 +29,12 @@ def create_app() -> FastAPI:
 
     @app.get("/health", tags=["meta"])
     def health_root():
-        return {"ok": True, "service": "api"}
+        return {
+            "ok": True,
+            "service": "api",
+            "vaults_owner_filter": True,
+            "loaded_from": str(__file__),
+        }
 
     app.include_router(v1_router, prefix="/api/v1")
 

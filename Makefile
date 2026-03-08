@@ -3,7 +3,7 @@
 SHELL := bash
 
 VENV_DIR ?= .venv
-PORT ?= 8000
+PORT ?= 8001
 MSG ?=
 REV ?= -1
 
@@ -45,7 +45,7 @@ install-prod:
 	$(PIP) install -e .
 
 dev:
-	$(PY) -m uvicorn apps.api.app.main:app --reload --port "$(PORT)"
+	$(PY) -m uvicorn apps.api.app.main:app --reload --reload-dir apps --reload-dir libs --port "$(PORT)"
 
 lint:
 	$(PY) -m ruff check .
@@ -76,7 +76,7 @@ downgrade:
 	$(PY) -m alembic downgrade "$(REV)"
 
 indexer:
-	$(PY) -m apps.indexer.main
+	$(PY) -m apps.indexer.main --loop
 
 worker:
 	$(PY) -m celery -A apps.worker.celery_app worker -l info

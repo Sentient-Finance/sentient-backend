@@ -32,6 +32,7 @@ query Vaults($first: Int!, $skip: Int!) {
   vaults(first: $first, skip: $skip) {
     id
     address
+    owner
     createdAtBlock
     createdAtTimestamp
     createdTxHash
@@ -144,6 +145,7 @@ def sync_vaults(
                 addr = _to_hex(v.get("address") or v.get("id"))
                 if not addr:
                     continue
+                owner_addr = _to_hex(v.get("owner"))
                 existing = (
                     db.query(Vault)
                     .filter(
@@ -153,7 +155,11 @@ def sync_vaults(
                     .first()
                 )
                 if existing:
-                    skipped += 1
+                    if owner_addr and (not existing.owner or existing.owner.lower() != owner_addr.lower()):
+                        existing.owner = owner_addr
+                        count += 1
+                    else:
+                        skipped += 1
                     continue
                 created_block = _to_int(v.get("createdAtBlock"))
                 created_ts = _to_int(v.get("createdAtTimestamp"))
@@ -161,6 +167,7 @@ def sync_vaults(
                     Vault(
                         chain_id=chain_id,
                         address=addr,
+                        owner=owner_addr,
                         created_block_number=created_block,
                         created_tx_hash=_to_hex(v.get("createdTxHash")),
                         created_timestamp=(
