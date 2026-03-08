@@ -63,6 +63,26 @@ class Settings(BaseSettings):
         default=1000,
         alias="INDEXER_BATCH_SIZE",
     )
+    subgraph_url: str | None = Field(
+        default=None,
+        alias="SUBGRAPH_URL",
+        description="GraphQL endpoint for subgraph (e.g. The Graph Studio)",
+    )
+    subgraph_api_key: str | None = Field(
+        default=None,
+        alias="SUBGRAPH_API_KEY",
+        description="API key for The Graph (required for 403 fix)",
+    )
+    subgraph_id: str | None = Field(
+        default=None,
+        alias="SUBGRAPH_ID",
+        description="Subgraph deployment ID for Gateway URL (find in Studio Query tab)",
+    )
+    chain_base_sepolia_id: int = Field(
+        default=84532,
+        alias="CHAIN_BASE_SEPOLIA_ID",
+        description="Chain ID for Base Sepolia (subgraph network)",
+    )
 
     strategy_tick_seconds: int = Field(
         default=60,
