@@ -1,8 +1,19 @@
-# sentient-backend
+## Sentient Backend
 
 Backend monorepo for Sentient Finance — hybrid architecture:
 - **The Graph** for read / event-history queries
 - **FastAPI + Celery worker** for write / action + CRE execution
+
+## Chainlink Integration
+
+The backend supports Chainlink **CCIP** (config, fee estimation) and **Feed Registry** configuration.
+
+### Files Using Chainlink
+
+| File | Purpose |
+|------|---------|
+| [`libs/core/config.py`](libs/core/config.py) | `chainlink_feed_registry_address` config |
+| [`apps/api/v1/routes/ccip.py`](apps/api/v1/routes/ccip.py) | CCIP config endpoint, fee estimation |
 
 ## Repository layout
 
@@ -150,6 +161,7 @@ Copy `.env.example` to `.env` and adjust as needed.
 | `REDIS_URL` | `redis://127.0.0.1:6379/0` | Redis DSN (broker + backend) |
 | `ETH_RPC_URL` | — | Ethereum JSON-RPC endpoint |
 | `DATABASE_URL` | — | Full DSN override (optional) |
+| `CHAINLINK_FEED_REGISTRY_ADDRESS` | — | Chainlink Feed Registry (optional) |
 
 ## Strategy engine tick (Issue #5)
 
