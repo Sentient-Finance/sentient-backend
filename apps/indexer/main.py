@@ -55,6 +55,10 @@ query VaultEvents($first: Int!, $skip: Int!) {
     tokenOut
     amountIn
     amountOut
+    enabled
+    buyThreshold
+    sellThreshold
+    tradeAmount
   }
 }
 """
@@ -259,6 +263,14 @@ def sync_vault_events(
                     payload["amountIn"] = str(_to_int(e["amountIn"]) or 0)
                 if e.get("amountOut") is not None:
                     payload["amountOut"] = str(_to_int(e["amountOut"]) or 0)
+                if e.get("enabled") is not None:
+                    payload["enabled"] = bool(e["enabled"])
+                if e.get("buyThreshold") is not None:
+                    payload["buyThreshold"] = str(_to_int(e["buyThreshold"]) or 0)
+                if e.get("sellThreshold") is not None:
+                    payload["sellThreshold"] = str(_to_int(e["sellThreshold"]) or 0)
+                if e.get("tradeAmount") is not None:
+                    payload["tradeAmount"] = str(_to_int(e["tradeAmount"]) or 0)
                 db.add(
                     VaultEvent(
                         chain_id=chain_id,

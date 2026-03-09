@@ -65,6 +65,10 @@ export function handleTokenRuleSet(event: TokenRuleSet): void {
   e.txHash = event.transaction.hash
   e.logIndex = event.logIndex
   e.token = event.params.token
+  e.enabled = event.params.enabled
+  e.buyThreshold = event.params.buyThreshold
+  e.sellThreshold = event.params.sellThreshold
+  e.tradeAmount = event.params.tradeAmount
   e.save()
 }
 

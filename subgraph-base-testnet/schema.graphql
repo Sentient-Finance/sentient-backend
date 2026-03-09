@@ -24,4 +24,10 @@ type VaultEvent @entity(immutable: true) {
   tokenOut: Bytes
   amountIn: BigInt
   amountOut: BigInt
+
+  # TokenRuleSet
+  enabled: Boolean
+  buyThreshold: BigInt
+  sellThreshold: BigInt
+  tradeAmount: BigInt
 }
