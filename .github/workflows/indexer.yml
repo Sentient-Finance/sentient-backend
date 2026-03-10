@@ -19,6 +19,11 @@ jobs:
       - name: Install dependencies
         run: pip install -e .
 
+      - name: Run migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: alembic upgrade head
+
       - name: Run indexer (one-shot)
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
