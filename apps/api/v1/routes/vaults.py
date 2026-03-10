@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Generic, Literal, TypeVar
+from typing import Annotated, Any, Generic, Literal, TypeVar
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
@@ -33,6 +33,11 @@ VaultEventType = Literal[
     "CrossChainShieldTriggered",
     "CCIPRouterUpdated",
     "AutomationConfigUpdated",
+]
+
+AddressParam = Annotated[
+    str,
+    Path(pattern=r"^0x[a-fA-F0-9]{40}$", description="Vault address"),
 ]
 
 
@@ -75,18 +80,40 @@ class HistoryItem(BaseModel):
     payload_json: dict[str, Any]
 
 
-def normalize_address(address: str) -> str:
+def _normalize_address(address: str) -> str:
     return address.lower()
 
 
-def address_param() -> str:
-    return Path(..., pattern=r"^0x[a-fA-F0-9]{40}$", description="Vault address")
+def _vault_to_list_item(row: Vault) -> VaultListItem:
+    return VaultListItem(
+        chain_id=row.chain_id,
+        address=row.address,
+        owner=row.owner,
+        created_block_number=row.created_block_number,
+        created_tx_hash=row.created_tx_hash,
+        created_timestamp=row.created_timestamp,
+    )
+
+
+def _event_to_history_item(row: VaultEvent) -> HistoryItem:
+    return HistoryItem(
+        chain_id=row.chain_id,
+        vault_address=row.vault_address,
+        event_type=row.event_type,
+        block_number=row.block_number,
+        tx_hash=row.tx_hash,
+        log_index=row.log_index,
+        timestamp=row.timestamp,
+        payload_json=row.payload_json or {},
+    )
 
 
 @router.get("", response_model=PaginatedResponse[VaultListItem])
 def list_vaults(
     chain_id: int | None = Query(default=84532, alias="chain"),
-    owner: str | None = Query(default=None, description="Filter by vault owner (wallet address)"),
+    owner: str | None = Query(
+        default=None, description="Filter by vault owner (wallet address)"
+    ),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -95,8 +122,7 @@ def list_vaults(
     if chain_id is not None:
         filters.append(Vault.chain_id == chain_id)
     if owner is not None and owner.strip():
-        owner_norm = normalize_address(owner.strip())
-        filters.append(func.lower(Vault.owner) == owner_norm)
+        filters.append(func.lower(Vault.owner) == _normalize_address(owner.strip()))
 
     count_stmt = select(func.count()).select_from(Vault)
     data_stmt = select(Vault).order_by(Vault.id.desc()).offset(offset).limit(limit)
@@ -112,17 +138,7 @@ def list_vaults(
         total=total,
         limit=limit,
         offset=offset,
-        items=[
-            VaultListItem(
-                chain_id=row.chain_id,
-                address=row.address,
-                owner=row.owner,
-                created_block_number=row.created_block_number,
-                created_tx_hash=row.created_tx_hash,
-                created_timestamp=row.created_timestamp,
-            )
-            for row in rows
-        ],
+        items=[_vault_to_list_item(row) for row in rows],
     )
 
 
@@ -135,7 +151,7 @@ def list_vaults(
     },
 )
 def get_vault_history(
-    address: str = address_param(),
+    address: AddressParam,
     chain_id: int | None = Query(default=None, alias="chain"),
     event_type: VaultEventType | None = Query(default=None, alias="type"),
     from_time: datetime | None = Query(default=None, alias="from"),
@@ -147,7 +163,7 @@ def get_vault_history(
     if from_time and to_time and from_time > to_time:
         raise HTTPException(status_code=422, detail="from must be <= to")
 
-    normalized = normalize_address(address)
+    normalized = _normalize_address(address)
 
     vault_exists_stmt = select(Vault.id).where(func.lower(Vault.address) == normalized)
     if chain_id is not None:
@@ -181,19 +197,7 @@ def get_vault_history(
         total=total,
         limit=limit,
         offset=offset,
-        items=[
-            HistoryItem(
-                chain_id=row.chain_id,
-                vault_address=row.vault_address,
-                event_type=row.event_type,
-                block_number=row.block_number,
-                tx_hash=row.tx_hash,
-                log_index=row.log_index,
-                timestamp=row.timestamp,
-                payload_json=row.payload_json or {},
-            )
-            for row in rows
-        ],
+        items=[_event_to_history_item(row) for row in rows],
     )
 
 
@@ -202,16 +206,16 @@ def get_vault_history(
     response_model=VaultDetail,
     responses={
         404: {"description": "Vault not found"},
-        409: {"description": "Address exists on multiple chains; provide `chain` query param"},
+        409: {"description": "Multiple chains match; provide `chain` query param"},
         422: {"description": "Invalid address or query params"},
     },
 )
 def get_vault(
-    address: str = address_param(),
+    address: AddressParam,
     chain_id: int | None = Query(default=None, alias="chain"),
     db: Session = Depends(get_db),
 ):
-    normalized = normalize_address(address)
+    normalized = _normalize_address(address)
 
     stmt = select(Vault).where(func.lower(Vault.address) == normalized)
     if chain_id is not None:
@@ -227,21 +231,18 @@ def get_vault(
         )
     vault = rows[0]
 
+    event_filters = [
+        func.lower(VaultEvent.vault_address) == normalized,
+        VaultEvent.chain_id == vault.chain_id,
+    ]
+
     event_count = db.scalar(
-        select(func.count())
-        .select_from(VaultEvent)
-        .where(
-            func.lower(VaultEvent.vault_address) == normalized,
-            VaultEvent.chain_id == vault.chain_id,
-        )
+        select(func.count()).select_from(VaultEvent).where(and_(*event_filters))
     ) or 0
 
     latest_event = db.scalar(
         select(VaultEvent)
-        .where(
-            func.lower(VaultEvent.vault_address) == normalized,
-            VaultEvent.chain_id == vault.chain_id,
-        )
+        .where(and_(*event_filters))
         .order_by(VaultEvent.block_number.desc(), VaultEvent.log_index.desc())
         .limit(1)
     )

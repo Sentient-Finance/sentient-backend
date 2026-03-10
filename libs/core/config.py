@@ -101,12 +101,21 @@ class Settings(BaseSettings):
         alias="ALERT_DEDUPE_SECONDS",
     )
 
+    allowed_origins: list[str] = Field(
+        default=["http://localhost:3000", "http://127.0.0.1:3000"],
+        alias="ALLOWED_ORIGINS",
+    )
+
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
 
     @property
     def sqlalchemy_database_uri(self) -> str:
         if self.database_url:
-            return self.database_url
+            url = self.database_url
+            if url.startswith("postgresql://") or url.startswith("postgres://"):
+                url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+                url = url.replace("postgres://", "postgresql+psycopg://", 1)
+            return url
 
         return (
             f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
