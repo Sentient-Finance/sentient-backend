@@ -101,6 +101,11 @@ class Settings(BaseSettings):
         alias="ALERT_DEDUPE_SECONDS",
     )
 
+    allowed_origins: list[str] = Field(
+        default=["http://localhost:3000", "http://127.0.0.1:3000"],
+        alias="ALLOWED_ORIGINS",
+    )
+
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
 
     @property
