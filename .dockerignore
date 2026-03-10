@@ -1,0 +1,15 @@
+.venv
+.git
+.github
+.pytest_cache
+.ruff_cache
+.claude
+__pycache__
+*.pyc
+*.pyo
+.env
+infra/
+docs/
+contract/
+subgraph-base-testnet/
+tests/
