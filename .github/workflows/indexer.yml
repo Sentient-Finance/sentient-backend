@@ -23,5 +23,5 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SUBGRAPH_API_KEY: ${{ secrets.SUBGRAPH_API_KEY }}
-          SUBGRAPH_ID: ${{ secrets.SUBGRAPH_ID }}
+          SUBGRAPH_URL: ${{ secrets.SUBGRAPH_URL }}
         run: python -m apps.indexer.main -v
