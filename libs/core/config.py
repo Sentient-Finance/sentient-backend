@@ -111,7 +111,11 @@ class Settings(BaseSettings):
     @property
     def sqlalchemy_database_uri(self) -> str:
         if self.database_url:
-            return self.database_url
+            url = self.database_url
+            if url.startswith("postgresql://") or url.startswith("postgres://"):
+                url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+                url = url.replace("postgres://", "postgresql+psycopg://", 1)
+            return url
 
         return (
             f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
