@@ -7,6 +7,11 @@ x-backend-common: &backend-common
     - REDIS_URL=redis://redis:6379/0
   env_file:
     - ../.env
+  restart: unless-stopped
+  deploy:
+    resources:
+      limits:
+        memory: 512M
   depends_on:
     postgres:
       condition: service_healthy
@@ -16,12 +21,13 @@ x-backend-common: &backend-common
 services:
   postgres:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -29,30 +35,70 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   redis:
     image: redis:7
+    restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redisdata:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   api:
     <<: *backend-common
     ports:
       - "8000:8000"
     command: python -m uvicorn apps.api.app.main:app --host 0.0.0.0 --port 8000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   worker:
     <<: *backend-common
     command: python -m celery -A apps.worker.celery_app worker -l info
+    healthcheck:
+      test: ["CMD-SHELL", "python -m celery -A apps.worker.celery_app inspect ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   beat:
     <<: *backend-common
     command: python -m celery -A apps.worker.celery_app beat -l info
+    depends_on:
+      worker:
+        condition: service_started
+
+  indexer:
+    <<: *backend-common
+    # Indexer is a long-running process. CMD handles SIGTERM via python.
+    command: python apps/indexer/main.py
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'python apps/indexer/main.py' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
 volumes:
   pgdata:
+  redisdata:
