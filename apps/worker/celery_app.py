@@ -26,6 +26,10 @@ def make_celery() -> Celery:
                 "task": "worker.risk_guard.tick",
                 "schedule": settings.risk_tick_seconds,
             },
+            "subgraph-sync": {
+                "task": "worker.subgraph.sync",
+                "schedule": settings.indexer_poll_interval_seconds,
+            },
         },
     )
     return app

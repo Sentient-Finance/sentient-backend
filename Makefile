@@ -31,8 +31,9 @@ help:
 	"  make migrate         Alembic upgrade head" \
 	"  make revision MSG=   Create Alembic revision" \
 	"  make downgrade REV=  Alembic downgrade (default -1)" \
-	"  make indexer         Run indexer module" \
-	"  make worker          Run worker module"
+	"  make indexer         Run indexer module (one-shot)" \
+	"  make worker          Run worker module" \
+	"  make beat            Run celery beat"
 
 venv:
 	python -m venv "$(VENV_DIR)"
@@ -76,7 +77,7 @@ downgrade:
 	$(PY) -m alembic downgrade "$(REV)"
 
 indexer:
-	$(PY) -m apps.indexer.main --loop
+	$(PY) -m apps.indexer.main
 
 worker:
 	$(PY) -m celery -A apps.worker.celery_app worker -l info

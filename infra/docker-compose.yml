@@ -1,16 +1,31 @@
+x-backend-common: &backend-common
+  build:
+    context: ..
+    dockerfile: Dockerfile
+  environment:
+    - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    - REDIS_URL=redis://redis:6379/0
+  env_file:
+    - ../.env
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
 services:
   postgres:
     image: postgres:16
     environment:
-      POSTGRES_DB: sentient
-      POSTGRES_USER: sentient
-      POSTGRES_PASSWORD: sentient
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sentient -d sentient"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -24,6 +39,20 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  api:
+    <<: *backend-common
+    ports:
+      - "8000:8000"
+    command: python -m uvicorn apps.api.app.main:app --host 0.0.0.0 --port 8000
+
+  worker:
+    <<: *backend-common
+    command: python -m celery -A apps.worker.celery_app worker -l info
+
+  beat:
+    <<: *backend-common
+    command: python -m celery -A apps.worker.celery_app beat -l info
 
 volumes:
   pgdata:

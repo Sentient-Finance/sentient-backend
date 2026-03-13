@@ -18,6 +18,7 @@ from libs.core.config import get_settings
 from libs.core.strategy import StrategyRule, evaluate_rule
 from libs.db.models import Vault, VaultEvent
 from libs.db.session import get_session_factory
+from libs.subgraph.sync import resolve_subgraph_url, sync_vaults, sync_vault_events
 
 @celery_app.task(name="worker.execution.enqueue")
 def enqueue_execution(vault_address: str, action: str, reason: str) -> dict:
@@ -70,6 +71,19 @@ def _latest_event(db, vault_address: str, event_type: str) -> VaultEvent | None:
     )
 
 
+def _latest_execution(db, vault_address: str) -> VaultEvent | None:
+    """Returns the latest execution event for the given vault."""
+    return db.scalar(
+        select(VaultEvent)
+        .where(
+            VaultEvent.vault_address == vault_address,
+            VaultEvent.event_type.in_(["SwapExecuted", "CrossChainShieldTriggered"]),
+        )
+        .order_by(VaultEvent.block_number.desc(), VaultEvent.log_index.desc())
+        .limit(1)
+    )
+
+
 @celery_app.task(name="worker.strategy.tick")
 def strategy_tick() -> dict:
     """Periodic strategy scan.
@@ -108,15 +122,10 @@ def strategy_tick() -> dict:
             buy_threshold = rule_payload.get("buy_threshold")
             sell_threshold = rule_payload.get("sell_threshold")
             cooldown_seconds = int(rule_payload.get("cooldown_seconds", 300))
-            last_executed_iso = rule_payload.get("last_executed_at")
             current_price = float(price_payload.get("price", 0))
 
-            last_executed_at = None
-            if last_executed_iso:
-                try:
-                    last_executed_at = datetime.fromisoformat(last_executed_iso.replace("Z", "+00:00"))
-                except Exception:
-                    last_executed_at = None
+            exec_event = _latest_execution(db, vault.address)
+            last_executed_at = exec_event.timestamp if exec_event else None
 
             decision = evaluate_rule(
                 StrategyRule(
@@ -214,4 +223,28 @@ def risk_guard_tick() -> dict:
         "alerts_sent": alerts_sent,
         "alerts_skipped": alerts_skipped,
         "at": now.isoformat(),
+    }
+
+
+@celery_app.task(name="worker.subgraph.sync")
+def sync_subgraph() -> dict:
+    """Periodic subgraph sync."""
+    settings = get_settings()
+    url = resolve_subgraph_url(settings)
+    if not url:
+        return {"status": "skipped", "reason": "no_subgraph_url"}
+
+    session_factory = get_session_factory()
+    chain_id = settings.chain_base_sepolia_id
+    batch = settings.indexer_batch_size
+    api_key = None if "gateway.thegraph.com" in url else settings.subgraph_api_key
+
+    with session_factory() as db:
+        v = sync_vaults(url, db, chain_id=chain_id, batch=batch, api_key=api_key)
+        ev = sync_vault_events(url, db, chain_id=chain_id, batch=batch, api_key=api_key)
+
+    return {
+        "vaults_synced": v,
+        "events_synced": ev,
+        "at": datetime.now(timezone.utc).isoformat(),
     }

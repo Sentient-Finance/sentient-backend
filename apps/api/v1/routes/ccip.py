@@ -161,8 +161,6 @@ def estimate_ccip_fee(
 ):
     rpc_url = _get_rpc_url(body.chain_id, settings)
     w3 = Web3(Web3.HTTPProvider(rpc_url))
-    if not w3.is_connected():
-        raise HTTPException(status_code=503, detail="RPC connection failed")
 
     ccip_router = CCIP_ROUTERS.get(body.chain_id)
     if not ccip_router:
@@ -176,7 +174,13 @@ def estimate_ccip_fee(
         address=Web3.to_checksum_address(ccip_router),
         abi=_GET_FEE_ABI,
     )
-    fee = contract.functions.getFee(body.destination_chain_selector, message).call()
+    try:
+        fee = contract.functions.getFee(body.destination_chain_selector, message).call()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"CCIP fee estimation failed: {exc}",
+        ) from exc
 
     return EstimateFeeResponse(
         fee_wei=str(fee),
