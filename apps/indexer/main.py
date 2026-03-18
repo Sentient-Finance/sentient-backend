@@ -72,6 +72,10 @@ def _redact_url(url: str) -> str:
     return url
 
 
+_RETRYABLE_STATUS = {429, 502, 503, 504}
+_MAX_RETRIES = 3
+
+
 def _graphql_request(
     url: str,
     query: str,
@@ -89,26 +93,40 @@ def _graphql_request(
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
     payload = {"query": query, "variables": variables}
-    try:
-        resp = httpx.post(url, json=payload, headers=headers, timeout=60.0)
-        resp.raise_for_status()
-        data = resp.json()
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 403:
-            print(f"403 Forbidden. URL: {_redact_url(url)}", file=sys.stderr)
-            print("Check:", file=sys.stderr)
-            print(
-                "  1. API key has this subgraph assigned? (Studio → API Keys → Assign)",
-                file=sys.stderr,
-            )
-            print("  2. Domain restrictions on API key?", file=sys.stderr)
-            body = e.response.text
-            if body:
-                print(f"  Response: {body[:200]}", file=sys.stderr)
-        raise
-    if "errors" in data:
-        raise RuntimeError(f"GraphQL errors: {data['errors']}")
-    return data.get("data", {})
+
+    for attempt in range(_MAX_RETRIES):
+        try:
+            resp = httpx.post(url, json=payload, headers=headers, timeout=60.0)
+            resp.raise_for_status()
+            data = resp.json()
+            if "errors" in data:
+                raise RuntimeError(f"GraphQL errors: {data['errors']}")
+            return data.get("data", {})
+        except (httpx.TimeoutException, httpx.ConnectError) as exc:
+            if attempt == _MAX_RETRIES - 1:
+                raise
+            wait = 2**attempt
+            print(f"Network error ({exc}), retry {attempt + 1}/{_MAX_RETRIES} in {wait}s", file=sys.stderr)
+            time.sleep(wait)
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code in _RETRYABLE_STATUS and attempt < _MAX_RETRIES - 1:
+                wait = 2**attempt
+                print(f"HTTP {e.response.status_code}, retry {attempt + 1}/{_MAX_RETRIES} in {wait}s", file=sys.stderr)
+                time.sleep(wait)
+                continue
+            if e.response.status_code == 403:
+                print(f"403 Forbidden. URL: {_redact_url(url)}", file=sys.stderr)
+                print("Check:", file=sys.stderr)
+                print(
+                    "  1. API key has this subgraph assigned? (Studio → API Keys → Assign)",
+                    file=sys.stderr,
+                )
+                print("  2. Domain restrictions on API key?", file=sys.stderr)
+                body = e.response.text
+                if body:
+                    print(f"  Response: {body[:200]}", file=sys.stderr)
+            raise
+    raise RuntimeError("unreachable")
 
 
 def _to_hex(val: Any) -> str | None:
