@@ -5,33 +5,154 @@ Import celery_app here (not the other way around) to avoid circular imports.
 
 from __future__ import annotations
 
-import json
 import urllib.parse
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from redis import Redis
-from sqlalchemy import and_, select
+from sqlalchemy import select
+from web3 import Web3
 
 from apps.worker.celery_app import celery_app
+from libs.chain.executor import execute_vault_upkeep
+from libs.chain.price_feed import get_chainlink_price
+from libs.chain.vault_reader import read_vault_token_rule
 from libs.core.config import get_settings
 from libs.core.strategy import StrategyRule, evaluate_rule
-from libs.db.models import Vault, VaultEvent
+from libs.db.models import Vault
 from libs.db.session import get_session_factory
 
-@celery_app.task(name="worker.execution.enqueue")
-def enqueue_execution(vault_address: str, action: str, reason: str) -> dict:
-    """Placeholder execution enqueue task.
+# WETH address on Base Sepolia
+_WETH_BASE_SEPOLIA = "0x4200000000000000000000000000000000000006"
+# Chainlink ETH/USD feed on Base Sepolia
+_ETH_USD_FEED_BASE_SEPOLIA = "0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1"
 
-    In Issue #6 this should call the CRE execution service.
+# ---------------------------------------------------------------------------
+# Module-level singletons — created once per worker process, reused every tick
+# ---------------------------------------------------------------------------
+_w3: Web3 | None = None
+_redis: Redis | None = None
+
+
+def _get_w3() -> Web3 | None:
+    global _w3
+    if _w3 is not None:
+        return _w3
+    settings = get_settings()
+    rpc = settings.base_rpc_url or settings.eth_rpc_url
+    if not rpc:
+        return None
+    candidate = Web3(Web3.HTTPProvider(rpc))
+    if not candidate.is_connected():
+        return None
+    _w3 = candidate
+    return _w3
+
+
+def _get_redis() -> Redis:
+    global _redis
+    if _redis is None:
+        _redis = Redis.from_url(get_settings().redis_url)
+    return _redis
+
+
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_price_cache(
+    w3: Web3, feed_addrs: set[str], stale_seconds: int
+) -> dict[str, float | None]:
+    """Fetch Chainlink prices for a set of feed addresses (deduped)."""
+    cache: dict[str, float | None] = {}
+    for addr in feed_addrs:
+        result = get_chainlink_price(w3, addr, stale_seconds=stale_seconds)
+        cache[addr] = result.price_usd if (result and not result.stale) else None
+    return cache
+
+
+def _iter_active_rules(w3: Web3, vaults: list) -> list[tuple]:
+    """Return (vault, rule) pairs where the rule is enabled with a threshold."""
+    active = []
+    for vault in vaults:
+        rule = read_vault_token_rule(w3, vault.address, _WETH_BASE_SEPOLIA)
+        if rule is None or not rule.enabled or rule.trade_amount == 0:
+            continue
+        if rule.buy_threshold_usd is None and rule.sell_threshold_usd is None:
+            continue
+        active.append((vault, rule))
+    return active
+
+
+# ---------------------------------------------------------------------------
+# Tasks
+# ---------------------------------------------------------------------------
+
+
+@celery_app.task(name="worker.execution.enqueue", bind=True, max_retries=2)
+def enqueue_execution(self, vault_address: str, action: str, reason: str) -> dict:
+    """Execute a vault swap on-chain via Chainlink AutomationCompatible interface.
+
+    Calls checkUpkeep(b'') on the vault to obtain performData, then broadcasts
+    performUpkeep(performData). Set EXECUTOR_DRY_RUN=false in .env for real txs.
     """
+    settings = get_settings()
+    w3 = _get_w3()
+
+    if not settings.executor_private_key or w3 is None:
+        missing = []
+        if not settings.executor_private_key:
+            missing.append("EXECUTOR_PRIVATE_KEY")
+        if w3 is None:
+            missing.append("BASE_RPC_URL / ETH_RPC_URL")
+        return {
+            "vault": vault_address,
+            "action": action,
+            "status": "skipped",
+            "detail": f"executor not configured — missing: {', '.join(missing)}",
+            "at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    result = execute_vault_upkeep(
+        w3=w3,
+        executor_private_key=settings.executor_private_key,
+        vault_address=vault_address,
+        action=action,
+        gas_limit=settings.executor_gas_limit,
+        dry_run=settings.executor_dry_run,
+    )
+
+    if not result.upkeep_needed:
+        return {
+            "vault": vault_address,
+            "action": action,
+            "status": "skipped",
+            "detail": "checkUpkeep returned false — no swap needed",
+            "at": result.performed_at,
+        }
+
+    if not result.success and not result.dry_run:
+        try:
+            raise self.retry(countdown=30, exc=RuntimeError(result.error))
+        except self.MaxRetriesExceededError:
+            return {
+                "vault": vault_address,
+                "action": action,
+                "status": "failed",
+                "detail": "max retries exceeded",
+                "error": result.error,
+                "at": result.performed_at,
+            }
 
     return {
         "vault": vault_address,
         "action": action,
-        "reason": reason,
-        "status": "queued",
-        "queued_at": datetime.now(timezone.utc).isoformat(),
+        "status": "ok" if result.success else "failed",
+        "tx_hash": result.tx_hash,
+        "dry_run": result.dry_run,
+        "error": result.error,
+        "at": result.performed_at,
     }
 
 
@@ -41,7 +162,7 @@ def notify_telegram(message: str) -> dict:
     if not settings.telegram_bot_token or not settings.telegram_chat_id:
         return {"status": "skipped", "reason": "telegram_not_configured"}
 
-    base = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
+    url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
     payload = urllib.parse.urlencode(
         {
             "chat_id": settings.telegram_chat_id,
@@ -49,8 +170,7 @@ def notify_telegram(message: str) -> dict:
             "disable_web_page_preview": "true",
         }
     ).encode()
-
-    req = urllib.request.Request(base, data=payload, method="POST")
+    req = urllib.request.Request(url, data=payload, method="POST")
     req.add_header("Content-Type", "application/x-www-form-urlencoded")
 
     try:
@@ -61,88 +181,87 @@ def notify_telegram(message: str) -> dict:
         return {"status": "failed", "reason": str(exc)}
 
 
-def _latest_event(db, vault_address: str, event_type: str) -> VaultEvent | None:
-    return db.scalar(
-        select(VaultEvent)
-        .where(VaultEvent.vault_address == vault_address, VaultEvent.event_type == event_type)
-        .order_by(VaultEvent.block_number.desc(), VaultEvent.log_index.desc())
-        .limit(1)
-    )
-
-
 @celery_app.task(name="worker.strategy.tick")
 def strategy_tick() -> dict:
-    """Periodic strategy scan.
+    """Periodic strategy scan — evaluate rules and enqueue executions."""
+    settings = get_settings()
+    redis_client = _get_redis()
 
-    - Reads latest TokenRuleSet + PriceObserved per vault from DB
-    - Evaluates threshold + cooldown
-    - Enqueues execution task with Redis idempotency lock
-    """
+    tick_lock_key = "strategy:tick:running"
+    if not redis_client.set(tick_lock_key, "1", ex=120, nx=True):
+        return {
+            "inspected": 0,
+            "triggered": 0,
+            "skipped": 0,
+            "reason": "already_running",
+            "at": datetime.now(timezone.utc).isoformat(),
+        }
 
-    session_factory = get_session_factory()
-    redis_client = Redis.from_url(get_settings().redis_url)
-    inspected = 0
-    triggered = 0
-    skipped = 0
+    inspected = triggered = skipped = 0
 
-    with session_factory() as db:
-        vaults = db.scalars(select(Vault)).all()
+    try:
+        w3 = _get_w3()
+        if w3 is None:
+            return {
+                "inspected": 0,
+                "triggered": 0,
+                "skipped": 0,
+                "error": "RPC not configured or unreachable",
+                "at": datetime.now(timezone.utc).isoformat(),
+            }
 
-        for vault in vaults:
-            inspected += 1
+        with get_session_factory()() as db:
+            vaults = db.scalars(select(Vault)).all()
+            active = _iter_active_rules(w3, vaults)
+            inspected = len(vaults)
+            skipped = inspected - len(active)
 
-            rule_event = _latest_event(db, vault.address, "TokenRuleSet")
-            price_event = _latest_event(db, vault.address, "PriceObserved")
-
-            if rule_event is None or price_event is None:
-                skipped += 1
-                continue
-
-            try:
-                rule_payload = rule_event.payload_json if isinstance(rule_event.payload_json, dict) else json.loads(rule_event.payload_json)
-                price_payload = price_event.payload_json if isinstance(price_event.payload_json, dict) else json.loads(price_event.payload_json)
-            except Exception:
-                skipped += 1
-                continue
-
-            buy_threshold = rule_payload.get("buy_threshold")
-            sell_threshold = rule_payload.get("sell_threshold")
-            cooldown_seconds = int(rule_payload.get("cooldown_seconds", 300))
-            last_executed_iso = rule_payload.get("last_executed_at")
-            current_price = float(price_payload.get("price", 0))
-
-            last_executed_at = None
-            if last_executed_iso:
-                try:
-                    last_executed_at = datetime.fromisoformat(last_executed_iso.replace("Z", "+00:00"))
-                except Exception:
-                    last_executed_at = None
-
-            decision = evaluate_rule(
-                StrategyRule(
-                    vault_address=vault.address,
-                    buy_threshold=float(buy_threshold) if buy_threshold is not None else None,
-                    sell_threshold=float(sell_threshold) if sell_threshold is not None else None,
-                    cooldown_seconds=cooldown_seconds,
-                    last_executed_at=last_executed_at,
-                ),
-                current_price=current_price,
+            # Fetch prices only for feeds actually in use
+            feed_addrs = {r.price_feed or _ETH_USD_FEED_BASE_SEPOLIA for _, r in active}
+            price_cache = _build_price_cache(
+                w3, feed_addrs, settings.stale_price_seconds
             )
 
-            if not decision.trigger or decision.action is None:
-                skipped += 1
-                continue
+            for vault, rule in active:
+                feed_addr = rule.price_feed or _ETH_USD_FEED_BASE_SEPOLIA
+                current_price = price_cache.get(feed_addr)
+                if current_price is None:
+                    skipped += 1
+                    continue
 
-            minute_key = datetime.now(timezone.utc).strftime("%Y%m%d%H%M")
-            idem_key = f"strategy:{vault.address}:{decision.action}:{minute_key}"
-            lock = redis_client.set(idem_key, "1", ex=90, nx=True)
+                last_executed_at = (
+                    datetime.fromtimestamp(rule.last_executed_ts, tz=timezone.utc)
+                    if rule.last_executed_ts > 0
+                    else None
+                )
 
-            if not lock:
-                skipped += 1
-                continue
+                decision = evaluate_rule(
+                    StrategyRule(
+                        vault_address=vault.address,
+                        buy_threshold=rule.buy_threshold_usd,
+                        sell_threshold=rule.sell_threshold_usd,
+                        cooldown_seconds=settings.execution_cooldown_seconds,
+                        last_executed_at=last_executed_at,
+                    ),
+                    current_price=current_price,
+                )
 
-            enqueue_execution.delay(vault.address, decision.action, decision.reason)
-            triggered += 1
+                if not decision.trigger or decision.action is None:
+                    skipped += 1
+                    continue
+
+                idem_key = f"strategy:exec:{vault.address}:{decision.action}"
+                if not redis_client.set(
+                    idem_key, "1", ex=settings.execution_cooldown_seconds, nx=True
+                ):
+                    skipped += 1
+                    continue
+
+                enqueue_execution.delay(vault.address, decision.action, decision.reason)
+                triggered += 1
+
+    finally:
+        redis_client.delete(tick_lock_key)
 
     return {
         "inspected": inspected,
@@ -154,56 +273,68 @@ def strategy_tick() -> dict:
 
 @celery_app.task(name="worker.risk_guard.tick")
 def risk_guard_tick() -> dict:
-    """Sends Telegram alert when price hits buy/sell threshold."""
-
+    """Sends Telegram alert when live Chainlink price hits a vault threshold."""
     settings = get_settings()
-    session_factory = get_session_factory()
-    redis_client = Redis.from_url(settings.redis_url)
-
-    inspected = 0
-    alerts_sent = 0
-    alerts_skipped = 0
-
+    redis_client = _get_redis()
     now = datetime.now(timezone.utc)
 
-    with session_factory() as db:
+    w3 = _get_w3()
+    if w3 is None:
+        return {
+            "inspected": 0,
+            "alerts_sent": 0,
+            "alerts_skipped": 0,
+            "error": "RPC not configured or unreachable",
+            "at": now.isoformat(),
+        }
+
+    inspected = alerts_sent = alerts_skipped = 0
+
+    with get_session_factory()() as db:
         vaults = db.scalars(select(Vault)).all()
+        active = _iter_active_rules(w3, vaults)
+        inspected = len(vaults)
 
-        for vault in vaults:
-            inspected += 1
+        feed_addrs = {r.price_feed or _ETH_USD_FEED_BASE_SEPOLIA for _, r in active}
+        price_cache = _build_price_cache(w3, feed_addrs, settings.stale_price_seconds)
 
-            rule_event = _latest_event(db, vault.address, "TokenRuleSet")
-            price_event = _latest_event(db, vault.address, "PriceObserved")
-
-            if rule_event is None or price_event is None:
+        for vault, rule in active:
+            feed_addr = rule.price_feed or _ETH_USD_FEED_BASE_SEPOLIA
+            current_price = price_cache.get(feed_addr)
+            if not current_price or current_price <= 0:
                 continue
 
-            try:
-                rule_payload = rule_event.payload_json if isinstance(rule_event.payload_json, dict) else json.loads(rule_event.payload_json)
-                price_payload = price_event.payload_json if isinstance(price_event.payload_json, dict) else json.loads(price_event.payload_json)
-                buy_threshold = rule_payload.get("buy_threshold")
-                sell_threshold = rule_payload.get("sell_threshold")
-                current_price = float(price_payload.get("price", 0))
-            except Exception:
-                continue
-
-            if current_price <= 0:
-                continue
-
-            if buy_threshold is not None and current_price <= float(buy_threshold):
-                key = f"risk_alert:{vault.address}:price_buy_threshold"
-                if redis_client.set(key, "1", ex=settings.alert_dedupe_seconds, nx=True):
+            if (
+                rule.buy_threshold_usd is not None
+                and current_price <= rule.buy_threshold_usd
+            ):
+                key = f"risk_alert:{vault.address}:buy"
+                if redis_client.set(
+                    key, "1", ex=settings.alert_dedupe_seconds, nx=True
+                ):
                     notify_telegram.delay(
-                        f"📉 Price hit BUY threshold\nVault: {vault.address}\nPrice: {current_price}\nThreshold: {buy_threshold}"
+                        f"📉 BUY threshold hit\n"
+                        f"Vault: {vault.address}\n"
+                        f"Price: ${current_price:,.2f}\n"
+                        f"Threshold: ${rule.buy_threshold_usd:,.2f}"
                     )
                     alerts_sent += 1
                 else:
                     alerts_skipped += 1
-            elif sell_threshold is not None and current_price >= float(sell_threshold):
-                key = f"risk_alert:{vault.address}:price_sell_threshold"
-                if redis_client.set(key, "1", ex=settings.alert_dedupe_seconds, nx=True):
+
+            elif (
+                rule.sell_threshold_usd is not None
+                and current_price >= rule.sell_threshold_usd
+            ):
+                key = f"risk_alert:{vault.address}:sell"
+                if redis_client.set(
+                    key, "1", ex=settings.alert_dedupe_seconds, nx=True
+                ):
                     notify_telegram.delay(
-                        f"📈 Price hit SELL threshold\nVault: {vault.address}\nPrice: {current_price}\nThreshold: {sell_threshold}"
+                        f"📈 SELL threshold hit\n"
+                        f"Vault: {vault.address}\n"
+                        f"Price: ${current_price:,.2f}\n"
+                        f"Threshold: ${rule.sell_threshold_usd:,.2f}"
                     )
                     alerts_sent += 1
                 else:

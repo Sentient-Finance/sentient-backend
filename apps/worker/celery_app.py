@@ -17,6 +17,11 @@ def make_celery() -> Celery:
         accept_content=["json"],
         timezone="UTC",
         enable_utc=True,
+        # Route execution tasks to a dedicated single-concurrency queue
+        # so all performUpkeep calls are sequential → no nonce collision.
+        task_routes={
+            "worker.execution.enqueue": {"queue": "execution"},
+        },
         beat_schedule={
             "strategy-tick": {
                 "task": "worker.strategy.tick",
