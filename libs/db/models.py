@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy import (
     JSON,
     BigInteger,
+    Boolean,
     DateTime,
     Index,
     Integer,
@@ -59,5 +60,27 @@ class VaultEvent(Base):
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     payload_json: Mapped[dict] = mapped_column(JSON)
     indexed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class ExecutionLog(Base):
+    """Audit trail for every on-chain execution attempt."""
+
+    __tablename__ = "execution_logs"
+    __table_args__ = (
+        Index("ix_execution_logs_vault_at", "vault_address", "executed_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    vault_address: Mapped[str] = mapped_column(String(64), index=True)
+    action: Mapped[str] = mapped_column(String(16))  # "buy" | "sell"
+    status: Mapped[str] = mapped_column(String(16))  # "ok" | "failed" | "skipped" | "dry_run"
+    tx_hash: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    dry_run: Mapped[bool] = mapped_column(Boolean, default=False)
+    error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    trigger_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    executed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
