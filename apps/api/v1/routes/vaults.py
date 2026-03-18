@@ -3,11 +3,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Any, Generic, Literal, TypeVar
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, select  # func kept for count() aggregates
 from sqlalchemy.orm import Session
 
+from apps.api.limiter import limiter
 from libs.db.models import Vault, VaultEvent
 from libs.db.session import get_db
 
@@ -151,7 +152,9 @@ def list_vaults(
         422: {"description": "Invalid request params (including date range)"},
     },
 )
+@limiter.limit("60/minute")
 def get_vault_history(
+    request: Request,
     address: AddressParam,
     chain_id: int | None = Query(default=None, alias="chain"),
     event_type: VaultEventType | None = Query(default=None, alias="type"),

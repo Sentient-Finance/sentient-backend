@@ -5,11 +5,12 @@ from __future__ import annotations
 from functools import lru_cache
 
 from eth_abi import encode
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
+from apps.api.limiter import limiter
 from libs.core.config import Settings, get_settings
 
 router = APIRouter(prefix="/vaults/ccip", tags=["ccip"])
@@ -167,7 +168,9 @@ def get_ccip_config() -> CCIPConfigResponse:
 
 
 @router.post("/estimate-fee", response_model=EstimateFeeResponse)
+@limiter.limit("20/minute")
 def estimate_ccip_fee(
+    request: Request,
     body: EstimateFeeRequest,
     settings: Settings = Depends(get_settings),
 ):
