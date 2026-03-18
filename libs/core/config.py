@@ -92,9 +92,15 @@ class Settings(BaseSettings):
         default=60,
         alias="RISK_TICK_SECONDS",
     )
+    execution_cooldown_seconds: int = Field(
+        default=3600,
+        alias="EXECUTION_COOLDOWN_SECONDS",
+        description="Min seconds between same-action executions on the same vault",
+    )
     stale_price_seconds: int = Field(
-        default=180,
+        default=3600,
         alias="STALE_PRICE_SECONDS",
+        description="Chainlink testnet feeds update ~hourly; mainnet use 180",
     )
     alert_dedupe_seconds: int = Field(
         default=300,
@@ -107,6 +113,28 @@ class Settings(BaseSettings):
     )
 
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
+
+    # Executor wallet — signs & sends executeSwap transactions
+    executor_private_key: str | None = Field(
+        default=None,
+        alias="EXECUTOR_PRIVATE_KEY",
+        description="Hex private key of the on-chain executor wallet",
+    )
+    executor_dry_run: bool = Field(
+        default=True,
+        alias="EXECUTOR_DRY_RUN",
+        description="If True, simulate via eth_call only — no real transactions sent",
+    )
+    executor_gas_limit: int = Field(
+        default=350_000,
+        alias="EXECUTOR_GAS_LIMIT",
+    )
+    # Base token used as the swap counter-asset (USDC on Base Sepolia by default)
+    base_token_address: str = Field(
+        default="0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+        alias="BASE_TOKEN_ADDRESS",
+        description="ERC-20 address of the base/quote token (USDC on Base Sepolia)",
+    )
 
     @property
     def sqlalchemy_database_uri(self) -> str:
@@ -126,4 +154,3 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
-

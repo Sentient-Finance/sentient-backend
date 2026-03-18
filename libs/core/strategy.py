@@ -23,7 +23,9 @@ class StrategyDecision:
     reason: str
 
 
-def evaluate_rule(rule: StrategyRule, current_price: float, now: datetime | None = None) -> StrategyDecision:
+def evaluate_rule(
+    rule: StrategyRule, current_price: float, now: datetime | None = None
+) -> StrategyDecision:
     ts = now or datetime.now(timezone.utc)
 
     if current_price <= 0:
