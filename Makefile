@@ -1,4 +1,4 @@
-.PHONY: help venv install install-prod dev lint fix format test db-up db-down migrate revision downgrade indexer worker
+.PHONY: help venv install install-prod dev lint fix format test db-up db-down migrate revision downgrade indexer worker prod-up prod-down prod-logs
 
 SHELL := bash
 
@@ -59,11 +59,22 @@ format:
 test:
 	$(PY) -m pytest
 
+PROD_COMPOSE := docker compose --project-directory . -f infra/docker-compose.yml -f docker-compose.prod.yml
+
 db-up:
 	docker compose -f infra/docker-compose.yml up -d
 
 db-down:
 	docker compose -f infra/docker-compose.yml down
+
+prod-up:
+	$(PROD_COMPOSE) up -d --build
+
+prod-down:
+	$(PROD_COMPOSE) down
+
+prod-logs:
+	$(PROD_COMPOSE) logs -f
 
 migrate:
 	$(PY) -m alembic upgrade head
@@ -79,7 +90,10 @@ indexer:
 	$(PY) -m apps.indexer.main --loop
 
 worker:
-	$(PY) -m celery -A apps.worker.celery_app worker -l info
+	$(PY) -m celery -A apps.worker.celery_app worker -l info -Q celery
+
+worker-execution:
+	$(PY) -m celery -A apps.worker.celery_app worker -l info -Q execution --concurrency=1
 
 beat:
 	$(PY) -m celery -A apps.worker.celery_app beat -l info
