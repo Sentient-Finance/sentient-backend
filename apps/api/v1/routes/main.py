@@ -18,6 +18,6 @@ def ready(db: Session = Depends(get_db)):
         raise HTTPException(status_code=503, detail="Database unavailable")
     return {"ok": True, "service": "api", "ready": True}
 
+
 router.include_router(vaults_router)
 router.include_router(ccip_router)
-

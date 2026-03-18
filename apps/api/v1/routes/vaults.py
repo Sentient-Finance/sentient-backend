@@ -5,7 +5,7 @@ from typing import Annotated, Any, Generic, Literal, TypeVar
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, select  # func kept for count() aggregates
 from sqlalchemy.orm import Session
 
 from libs.db.models import Vault, VaultEvent
@@ -122,7 +122,8 @@ def list_vaults(
     if chain_id is not None:
         filters.append(Vault.chain_id == chain_id)
     if owner is not None and owner.strip():
-        filters.append(func.lower(Vault.owner) == _normalize_address(owner.strip()))
+        # Addresses are stored lowercase — direct equality uses the index
+        filters.append(Vault.owner == _normalize_address(owner.strip()))
 
     count_stmt = select(func.count()).select_from(Vault)
     data_stmt = select(Vault).order_by(Vault.id.desc()).offset(offset).limit(limit)
@@ -165,13 +166,13 @@ def get_vault_history(
 
     normalized = _normalize_address(address)
 
-    vault_exists_stmt = select(Vault.id).where(func.lower(Vault.address) == normalized)
+    vault_exists_stmt = select(Vault.id).where(Vault.address == normalized)
     if chain_id is not None:
         vault_exists_stmt = vault_exists_stmt.where(Vault.chain_id == chain_id)
     if db.scalar(vault_exists_stmt.limit(1)) is None:
         raise HTTPException(status_code=404, detail="vault not found")
 
-    filters = [func.lower(VaultEvent.vault_address) == normalized]
+    filters = [VaultEvent.vault_address == normalized]
     if chain_id is not None:
         filters.append(VaultEvent.chain_id == chain_id)
     if event_type:
@@ -217,7 +218,7 @@ def get_vault(
 ):
     normalized = _normalize_address(address)
 
-    stmt = select(Vault).where(func.lower(Vault.address) == normalized)
+    stmt = select(Vault).where(Vault.address == normalized)
     if chain_id is not None:
         stmt = stmt.where(Vault.chain_id == chain_id)
 
@@ -232,13 +233,16 @@ def get_vault(
     vault = rows[0]
 
     event_filters = [
-        func.lower(VaultEvent.vault_address) == normalized,
+        VaultEvent.vault_address == normalized,
         VaultEvent.chain_id == vault.chain_id,
     ]
 
-    event_count = db.scalar(
-        select(func.count()).select_from(VaultEvent).where(and_(*event_filters))
-    ) or 0
+    event_count = (
+        db.scalar(
+            select(func.count()).select_from(VaultEvent).where(and_(*event_filters))
+        )
+        or 0
+    )
 
     latest_event = db.scalar(
         select(VaultEvent)

@@ -1,10 +1,14 @@
 """CCIP config and fee estimation."""
+
 from __future__ import annotations
+
+from functools import lru_cache
 
 from eth_abi import encode
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from web3 import Web3
+from web3.exceptions import ContractLogicError
 
 from libs.core.config import Settings, get_settings
 
@@ -111,6 +115,12 @@ def _get_rpc_url(chain_id: int, settings: Settings) -> str:
     raise HTTPException(status_code=400, detail=f"Unsupported chain_id: {chain_id}")
 
 
+@lru_cache(maxsize=4)
+def _get_w3_for_chain(rpc_url: str) -> Web3:
+    """Cache one Web3 instance per RPC URL — reuses the connection pool."""
+    return Web3(Web3.HTTPProvider(rpc_url))
+
+
 def _build_ccip_message(body: EstimateFeeRequest) -> tuple:  # type: ignore[type-arg]
     receiver_bytes = encode(["address"], [Web3.to_checksum_address(body.receiver)])
     extra_args = _EXTRA_ARGS_TAG + encode(["uint256"], [0])
@@ -119,21 +129,19 @@ def _build_ccip_message(body: EstimateFeeRequest) -> tuple:  # type: ignore[type
     return (receiver_bytes, b"", token_amounts, fee_token, extra_args)
 
 
-@router.get("/config", response_model=CCIPConfigResponse)
-def get_ccip_config():
-    chains = [
+# Built once at import time — data is static, no need to reconstruct per request
+_CCIP_CONFIG = CCIPConfigResponse(
+    chains=[
         CCIPChainConfig(
-            chain_id=84532,
-            chain_name="Base Sepolia",
-            ccip_router=CCIP_ROUTERS[84532],
+            chain_id=84532, chain_name="Base Sepolia", ccip_router=CCIP_ROUTERS[84532]
         ),
         CCIPChainConfig(
             chain_id=11155111,
             chain_name="Ethereum Sepolia",
             ccip_router=CCIP_ROUTERS[11155111],
         ),
-    ]
-    destinations = [
+    ],
+    destinations=[
         CCIPDestinationConfig(
             chain_name="Ethereum Sepolia",
             selector=CCIP_CHAIN_SELECTORS["ethereum_sepolia"],
@@ -143,15 +151,19 @@ def get_ccip_config():
             selector=CCIP_CHAIN_SELECTORS["arbitrum_sepolia"],
         ),
         CCIPDestinationConfig(
-            chain_name="OP Sepolia",
-            selector=CCIP_CHAIN_SELECTORS["op_sepolia"],
+            chain_name="OP Sepolia", selector=CCIP_CHAIN_SELECTORS["op_sepolia"]
         ),
         CCIPDestinationConfig(
             chain_name="BNB Chain Testnet",
             selector=CCIP_CHAIN_SELECTORS["bnb_chain_testnet"],
         ),
-    ]
-    return CCIPConfigResponse(chains=chains, destinations=destinations)
+    ],
+)
+
+
+@router.get("/config", response_model=CCIPConfigResponse)
+def get_ccip_config() -> CCIPConfigResponse:
+    return _CCIP_CONFIG
 
 
 @router.post("/estimate-fee", response_model=EstimateFeeResponse)
@@ -160,25 +172,24 @@ def estimate_ccip_fee(
     settings: Settings = Depends(get_settings),
 ):
     rpc_url = _get_rpc_url(body.chain_id, settings)
-    w3 = Web3(Web3.HTTPProvider(rpc_url))
-    if not w3.is_connected():
-        raise HTTPException(status_code=503, detail="RPC connection failed")
+    w3 = _get_w3_for_chain(rpc_url)
 
     ccip_router = CCIP_ROUTERS.get(body.chain_id)
     if not ccip_router:
         raise HTTPException(
-            status_code=400,
-            detail=f"No CCIP router for chain_id {body.chain_id}",
+            status_code=400, detail=f"No CCIP router for chain_id {body.chain_id}"
         )
 
     message = _build_ccip_message(body)
     contract = w3.eth.contract(
-        address=Web3.to_checksum_address(ccip_router),
-        abi=_GET_FEE_ABI,
+        address=Web3.to_checksum_address(ccip_router), abi=_GET_FEE_ABI
     )
-    fee = contract.functions.getFee(body.destination_chain_selector, message).call()
 
-    return EstimateFeeResponse(
-        fee_wei=str(fee),
-        fee_eth=str(w3.from_wei(fee, "ether")),
-    )
+    try:
+        fee = contract.functions.getFee(body.destination_chain_selector, message).call()
+    except ContractLogicError as exc:
+        raise HTTPException(status_code=400, detail=f"getFee reverted: {exc}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"RPC error: {exc}") from exc
+
+    return EstimateFeeResponse(fee_wei=str(fee), fee_eth=str(w3.from_wei(fee, "ether")))
