@@ -6,6 +6,7 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     DateTime,
+    Index,
     Integer,
     String,
     UniqueConstraint,
@@ -40,6 +41,12 @@ class VaultEvent(Base):
     __tablename__ = "vault_events"
     __table_args__ = (
         UniqueConstraint("chain_id", "tx_hash", "log_index", name="uq_chain_tx_log"),
+        # Speeds up get_vault_history which always filters by (chain_id, vault_address)
+        Index("ix_vault_events_chain_vault", "chain_id", "vault_address"),
+        # Speeds up pagination ordering inside a vault's history
+        Index(
+            "ix_vault_events_vault_block", "vault_address", "block_number", "log_index"
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
