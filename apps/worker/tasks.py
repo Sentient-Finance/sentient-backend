@@ -5,6 +5,7 @@ Import celery_app here (not the other way around) to avoid circular imports.
 
 from __future__ import annotations
 
+import logging
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
@@ -19,7 +20,7 @@ from libs.chain.price_feed import get_chainlink_price
 from libs.chain.vault_reader import read_vault_token_rule
 from libs.core.config import get_settings
 from libs.core.strategy import StrategyRule, evaluate_rule
-from libs.db.models import Vault
+from libs.db.models import ExecutionLog, Vault
 from libs.db.session import get_session_factory
 
 # WETH address on Base Sepolia
@@ -27,9 +28,7 @@ _WETH_BASE_SEPOLIA = "0x4200000000000000000000000000000000000006"
 # Chainlink ETH/USD feed on Base Sepolia
 _ETH_USD_FEED_BASE_SEPOLIA = "0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1"
 
-# ---------------------------------------------------------------------------
 # Module-level singletons — created once per worker process, reused every tick
-# ---------------------------------------------------------------------------
 _w3: Web3 | None = None
 _redis: Redis | None = None
 
@@ -56,9 +55,7 @@ def _get_redis() -> Redis:
     return _redis
 
 
-# ---------------------------------------------------------------------------
 # Shared helpers
-# ---------------------------------------------------------------------------
 
 
 def _build_price_cache(
@@ -85,11 +82,39 @@ def _iter_active_rules(w3: Web3, vaults: list) -> list[tuple]:
     return active
 
 
-# ---------------------------------------------------------------------------
+# Helpers
+def _persist_execution_log(
+    vault_address: str,
+    action: str,
+    status: str,
+    *,
+    tx_hash: str | None = None,
+    error: str | None = None,
+    dry_run: bool = False,
+    reason: str | None = None,
+    executed_at: datetime,
+) -> None:
+    try:
+        with get_session_factory()() as db:
+            db.add(
+                ExecutionLog(
+                    vault_address=vault_address,
+                    action=action,
+                    status=status,
+                    tx_hash=tx_hash,
+                    dry_run=dry_run,
+                    error=error[:500] if error else None,
+                    trigger_reason=reason[:200] if reason else None,
+                    executed_at=executed_at,
+                )
+            )
+            db.commit()
+    except Exception as exc:
+        # Never let DB failure block the task result
+        logging.getLogger(__name__).warning("Failed to persist ExecutionLog: %s", exc)
+
+
 # Tasks
-# ---------------------------------------------------------------------------
-
-
 @celery_app.task(name="worker.execution.enqueue", bind=True, max_retries=2)
 def enqueue_execution(self, vault_address: str, action: str, reason: str) -> dict:
     """Execute a vault swap on-chain via Chainlink AutomationCompatible interface.
@@ -100,19 +125,17 @@ def enqueue_execution(self, vault_address: str, action: str, reason: str) -> dic
     settings = get_settings()
     w3 = _get_w3()
 
+    now = datetime.now(timezone.utc)
+
     if not settings.executor_private_key or w3 is None:
         missing = []
         if not settings.executor_private_key:
             missing.append("EXECUTOR_PRIVATE_KEY")
         if w3 is None:
             missing.append("BASE_RPC_URL / ETH_RPC_URL")
-        return {
-            "vault": vault_address,
-            "action": action,
-            "status": "skipped",
-            "detail": f"executor not configured — missing: {', '.join(missing)}",
-            "at": datetime.now(timezone.utc).isoformat(),
-        }
+        detail = f"executor not configured — missing: {', '.join(missing)}"
+        _persist_execution_log(vault_address, action, "skipped", reason=reason, error=detail, executed_at=now)
+        return {"vault": vault_address, "action": action, "status": "skipped", "detail": detail, "at": now.isoformat()}
 
     result = execute_vault_upkeep(
         w3=w3,
@@ -123,37 +146,22 @@ def enqueue_execution(self, vault_address: str, action: str, reason: str) -> dic
         dry_run=settings.executor_dry_run,
     )
 
+    executed_at = datetime.fromisoformat(result.performed_at) if result.performed_at else now
+
     if not result.upkeep_needed:
-        return {
-            "vault": vault_address,
-            "action": action,
-            "status": "skipped",
-            "detail": "checkUpkeep returned false — no swap needed",
-            "at": result.performed_at,
-        }
+        _persist_execution_log(vault_address, action, "skipped", reason=reason, executed_at=executed_at)
+        return {"vault": vault_address, "action": action, "status": "skipped", "detail": "checkUpkeep returned false — no swap needed", "at": result.performed_at}
 
     if not result.success and not result.dry_run:
+        _persist_execution_log(vault_address, action, "failed", tx_hash=result.tx_hash, error=result.error, dry_run=result.dry_run, reason=reason, executed_at=executed_at)
         try:
             raise self.retry(countdown=30, exc=RuntimeError(result.error))
         except self.MaxRetriesExceededError:
-            return {
-                "vault": vault_address,
-                "action": action,
-                "status": "failed",
-                "detail": "max retries exceeded",
-                "error": result.error,
-                "at": result.performed_at,
-            }
+            return {"vault": vault_address, "action": action, "status": "failed", "detail": "max retries exceeded", "error": result.error, "at": result.performed_at}
 
-    return {
-        "vault": vault_address,
-        "action": action,
-        "status": "ok" if result.success else "failed",
-        "tx_hash": result.tx_hash,
-        "dry_run": result.dry_run,
-        "error": result.error,
-        "at": result.performed_at,
-    }
+    status = "dry_run" if result.dry_run else ("ok" if result.success else "failed")
+    _persist_execution_log(vault_address, action, status, tx_hash=result.tx_hash, error=result.error, dry_run=result.dry_run, reason=reason, executed_at=executed_at)
+    return {"vault": vault_address, "action": action, "status": status, "tx_hash": result.tx_hash, "dry_run": result.dry_run, "error": result.error, "at": result.performed_at}
 
 
 @celery_app.task(name="worker.notify.telegram")
