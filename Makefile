@@ -32,7 +32,10 @@ help:
 	"  make revision MSG=   Create Alembic revision" \
 	"  make downgrade REV=  Alembic downgrade (default -1)" \
 	"  make indexer         Run indexer module" \
-	"  make worker          Run worker module"
+	"  make worker          Run worker module" \
+	"  make worker-execution Run execution worker module" \
+	"  make beat            Run celery beat" \
+	"  make test-noti       Run local notification test"
 
 venv:
 	python -m venv "$(VENV_DIR)"
@@ -97,9 +100,5 @@ worker-execution:
 
 beat:
 	$(PY) -m celery -A apps.worker.celery_app beat -l info
-
-test:
-	$(PY) -m pytest
-
 test-noti:
 	$(PY) -c "from apps.worker.tasks import risk_guard_tick; print(risk_guard_tick())"
