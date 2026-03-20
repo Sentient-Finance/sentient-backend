@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Literal
 
+from eth_account.signers.local import LocalAccount
 from web3 import Web3
 from web3.exceptions import ContractLogicError
 
@@ -71,7 +72,7 @@ class ExecutionResult:
 def execute_vault_upkeep(
     *,
     w3: Web3,
-    executor_private_key: str,
+    account: LocalAccount,
     vault_address: str,
     action: str = "auto",
     gas_limit: int = 350_000,
@@ -86,13 +87,12 @@ def execute_vault_upkeep(
 
     Args:
         w3: Connected Web3 instance (caller is responsible for caching/reuse).
-        executor_private_key: Hex private key of the executor wallet.
+        account: Pre-loaded executor LocalAccount (raw key stays in caller scope).
         vault_address: PortfolioVault clone address.
         action: Label for logging ("buy" / "sell" / "auto").
         gas_limit: Upper gas bound; unused gas is refunded.
         dry_run: Simulate only — no real transaction is sent.
     """
-    account = w3.eth.account.from_key(executor_private_key)
     checksum_vault = Web3.to_checksum_address(vault_address)
     contract = w3.eth.contract(address=checksum_vault, abi=VAULT_ABI)
 
@@ -162,7 +162,7 @@ def execute_vault_upkeep(
                 "maxFeePerGas": base_fee * 2 + priority_fee,
             }
         )
-        signed = w3.eth.account.sign_transaction(tx, executor_private_key)
+        signed = account.sign_transaction(tx)
         raw_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
         # Base Sepolia block time ~2s; 60s is more than enough
         receipt = w3.eth.wait_for_transaction_receipt(raw_hash, timeout=60)

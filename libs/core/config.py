@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     postgres_port: int = Field(default=5432, alias="POSTGRES_PORT")
     postgres_db: str = Field(default="sentient", alias="POSTGRES_DB")
     postgres_user: str = Field(default="sentient", alias="POSTGRES_USER")
-    postgres_password: str = Field(default="sentient", alias="POSTGRES_PASSWORD")
+    postgres_password: str = Field(default="", alias="POSTGRES_PASSWORD")
 
     redis_url: str = Field(
         default="redis://127.0.0.1:6379/0",
@@ -41,14 +41,17 @@ class Settings(BaseSettings):
     max_notional_per_trade: float = Field(
         default=0.0,
         alias="MAX_NOTIONAL_PER_TRADE",
+        description="Max USD notional per single trade. 0.0 = unlimited (no cap enforced).",
     )
     max_daily_notional: float = Field(
         default=0.0,
         alias="MAX_DAILY_NOTIONAL",
+        description="Max USD notional across all trades in a rolling 24-hour window. 0.0 = unlimited.",
     )
     max_open_positions: int = Field(
         default=0,
         alias="MAX_OPEN_POSITIONS",
+        description="Max number of simultaneously open positions. 0 = unlimited.",
     )
 
     indexer_poll_interval_seconds: int = Field(
@@ -105,6 +108,17 @@ class Settings(BaseSettings):
     alert_dedupe_seconds: int = Field(
         default=300,
         alias="ALERT_DEDUPE_SECONDS",
+    )
+
+    rate_limit_public: str = Field(
+        default="60/minute",
+        alias="RATE_LIMIT_PUBLIC",
+        description="Rate limit for standard public APIs",
+    )
+    rate_limit_heavy: str = Field(
+        default="20/minute",
+        alias="RATE_LIMIT_HEAVY",
+        description="Rate limit for heavy RPC/write APIs",
     )
 
     allowed_origins: list[str] = Field(

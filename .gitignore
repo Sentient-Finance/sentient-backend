@@ -218,7 +218,6 @@ ui/
 **/crypto_news/*
 
 monad_docs_md/tweets/*
-tests/
 
 # OS-specific files
 .DS_Store

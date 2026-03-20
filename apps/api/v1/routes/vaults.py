@@ -7,12 +7,15 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, select  # func kept for count() aggregates
 from sqlalchemy.orm import Session
+from web3 import Web3
 
 from apps.api.limiter import limiter
+from libs.core.config import get_settings
 from libs.db.models import Vault, VaultEvent
 from libs.db.session import get_db
 
 router = APIRouter(prefix="/vaults", tags=["vaults"])
+settings = get_settings()
 
 T = TypeVar("T")
 
@@ -110,7 +113,9 @@ def _event_to_history_item(row: VaultEvent) -> HistoryItem:
 
 
 @router.get("", response_model=PaginatedResponse[VaultListItem])
+@limiter.limit(settings.rate_limit_public)
 def list_vaults(
+    request: Request,
     chain_id: int | None = Query(default=84532, alias="chain"),
     owner: str | None = Query(
         default=None, description="Filter by vault owner (wallet address)"
@@ -123,8 +128,11 @@ def list_vaults(
     if chain_id is not None:
         filters.append(Vault.chain_id == chain_id)
     if owner is not None and owner.strip():
+        owner_clean = owner.strip()
+        if not Web3.is_address(owner_clean):
+            raise HTTPException(status_code=422, detail="invalid owner address")
         # Addresses are stored lowercase — direct equality uses the index
-        filters.append(Vault.owner == _normalize_address(owner.strip()))
+        filters.append(Vault.owner == _normalize_address(owner_clean))
 
     count_stmt = select(func.count()).select_from(Vault)
     data_stmt = select(Vault).order_by(Vault.id.desc()).offset(offset).limit(limit)
@@ -152,7 +160,7 @@ def list_vaults(
         422: {"description": "Invalid request params (including date range)"},
     },
 )
-@limiter.limit("60/minute")
+@limiter.limit(settings.rate_limit_public)
 def get_vault_history(
     request: Request,
     address: AddressParam,
@@ -214,7 +222,9 @@ def get_vault_history(
         422: {"description": "Invalid address or query params"},
     },
 )
+@limiter.limit(settings.rate_limit_public)
 def get_vault(
+    request: Request,
     address: AddressParam,
     chain_id: int | None = Query(default=None, alias="chain"),
     db: Session = Depends(get_db),

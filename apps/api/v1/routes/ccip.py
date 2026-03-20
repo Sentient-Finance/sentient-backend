@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from functools import lru_cache
 
 from eth_abi import encode
@@ -14,6 +15,7 @@ from apps.api.limiter import limiter
 from libs.core.config import Settings, get_settings
 
 router = APIRouter(prefix="/vaults/ccip", tags=["ccip"])
+settings = get_settings()
 
 CCIP_ROUTERS: dict[int, str] = {
     84532: "0xD3b06cEbF099CE7DA4AcCf578aaebFDBd6e88a93",
@@ -168,7 +170,7 @@ def get_ccip_config() -> CCIPConfigResponse:
 
 
 @router.post("/estimate-fee", response_model=EstimateFeeResponse)
-@limiter.limit("20/minute")
+@limiter.limit(settings.rate_limit_heavy)
 def estimate_ccip_fee(
     request: Request,
     body: EstimateFeeRequest,
@@ -190,9 +192,10 @@ def estimate_ccip_fee(
 
     try:
         fee = contract.functions.getFee(body.destination_chain_selector, message).call()
-    except ContractLogicError as exc:
-        raise HTTPException(status_code=400, detail=f"getFee reverted: {exc}") from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"RPC error: {exc}") from exc
+    except ContractLogicError:
+        raise HTTPException(status_code=400, detail="getFee reverted: contract rejected the message parameters") from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="RPC error estimating CCIP fee") from None
 
-    return EstimateFeeResponse(fee_wei=str(fee), fee_eth=str(w3.from_wei(fee, "ether")))
+    fee_eth = format(Decimal(w3.from_wei(fee, "ether")), "f")
+    return EstimateFeeResponse(fee_wei=str(fee), fee_eth=fee_eth)

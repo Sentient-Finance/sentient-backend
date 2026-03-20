@@ -61,7 +61,11 @@ def _get_redis() -> Redis:
 def _build_price_cache(
     w3: Web3, feed_addrs: set[str], stale_seconds: int
 ) -> dict[str, float | None]:
-    """Fetch Chainlink prices for a set of feed addresses (deduped)."""
+    """Fetch Chainlink prices for a set of feed addresses (deduped).
+
+    Stale prices (result.stale is True) are stored as None so callers that
+    check ``if current_price is None`` will automatically skip stale feeds.
+    """
     cache: dict[str, float | None] = {}
     for addr in feed_addrs:
         result = get_chainlink_price(w3, addr, stale_seconds=stale_seconds)
@@ -137,9 +141,11 @@ def enqueue_execution(self, vault_address: str, action: str, reason: str) -> dic
         _persist_execution_log(vault_address, action, "skipped", reason=reason, error=detail, executed_at=now)
         return {"vault": vault_address, "action": action, "status": "skipped", "detail": detail, "at": now.isoformat()}
 
+    # Load Account here so the raw key never travels through function call chains
+    account = w3.eth.account.from_key(settings.executor_private_key)
     result = execute_vault_upkeep(
         w3=w3,
-        executor_private_key=settings.executor_private_key,
+        account=account,
         vault_address=vault_address,
         action=action,
         gas_limit=settings.executor_gas_limit,
@@ -155,7 +161,7 @@ def enqueue_execution(self, vault_address: str, action: str, reason: str) -> dic
     if not result.success and not result.dry_run:
         _persist_execution_log(vault_address, action, "failed", tx_hash=result.tx_hash, error=result.error, dry_run=result.dry_run, reason=reason, executed_at=executed_at)
         try:
-            raise self.retry(countdown=30, exc=RuntimeError(result.error))
+            self.retry(countdown=30, exc=RuntimeError(result.error))
         except self.MaxRetriesExceededError:
             return {"vault": vault_address, "action": action, "status": "failed", "detail": "max retries exceeded", "error": result.error, "at": result.performed_at}
 
