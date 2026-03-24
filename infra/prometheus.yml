@@ -1,15 +1,16 @@
-Lines changed: 17 additions & 0 deletions
-Original file line number	Original file line	Diff line number	Diff line change
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
+
 scrape_configs:
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
+
   - job_name: 'cadvisor'
     static_configs:
       - targets: ['cadvisor:8080']
+
   - job_name: 'api'
     metrics_path: '/metrics'
     static_configs:
