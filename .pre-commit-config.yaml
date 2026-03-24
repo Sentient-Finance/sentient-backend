@@ -8,6 +8,16 @@ repos:
     rev: 24.8.0
     hooks:
       - id: black
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.11.2
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - "celery-types"
+          - "types-redis"
+          - "sqlalchemy[mypy]"
+          - "pydantic"
+        args: [--ignore-missing-imports]
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
     hooks:
