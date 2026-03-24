@@ -35,7 +35,6 @@ help:
 	"  make worker          Run worker module" \
 	"  make worker-execution Run execution worker module" \
 	"  make beat            Run celery beat" \
-	"  make test-noti       Run local notification test"
 
 venv:
 	python -m venv "$(VENV_DIR)"
@@ -63,12 +62,13 @@ test:
 	$(PY) -m pytest
 
 PROD_COMPOSE := docker compose --project-directory . -f infra/docker-compose.yml -f docker-compose.prod.yml
+INFRA_COMPOSE := docker compose --project-directory . -f infra/docker-compose.yml
 
 db-up:
-	docker compose -f infra/docker-compose.yml up -d
+	$(INFRA_COMPOSE) up -d
 
 db-down:
-	docker compose -f infra/docker-compose.yml down
+	$(INFRA_COMPOSE) down
 
 prod-up:
 	$(PROD_COMPOSE) up -d --build
