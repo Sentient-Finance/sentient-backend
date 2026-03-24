@@ -62,12 +62,40 @@ services:
       - "127.0.0.1:3005:3000"
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./infra/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yaml
     depends_on:
       - prometheus
+      - loki
     deploy:
       resources:
         limits:
           memory: 256M
+
+  loki:
+    image: grafana/loki:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3100:3100"
+    volumes:
+      - ./infra/loki-config.yml:/etc/loki/local-config.yaml
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  promtail:
+    image: grafana/promtail:latest
+    restart: unless-stopped
+    volumes:
+      - ./infra/promtail-config.yml:/etc/promtail/config.yml
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/log:/var/log:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest
@@ -97,3 +125,4 @@ volumes:
   redisdata:
   prometheus_data:
   grafana_data:
+  loki_data:

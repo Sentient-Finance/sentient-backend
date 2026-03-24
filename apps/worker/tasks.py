@@ -24,6 +24,8 @@ from libs.core.strategy import StrategyRule, evaluate_rule
 from libs.db.models import ExecutionLog, Vault
 from libs.db.session import get_session_factory
 
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 # WETH address on Base Sepolia
 _WETH_BASE_SEPOLIA = "0x4200000000000000000000000000000000000006"
 # Chainlink ETH/USD feed on Base Sepolia
@@ -32,6 +34,8 @@ _ETH_USD_FEED_BASE_SEPOLIA = "0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1"
 # Module-level singletons — created once per worker process, reused every tick
 _w3: Web3 | None = None
 _redis: Redis | None = None
+
+logger = logging.getLogger(__name__)
 
 
 def _get_w3() -> Web3 | None:
@@ -266,6 +270,7 @@ def strategy_tick() -> dict:
     try:
         w3 = _get_w3()
         if w3 is None:
+            logger.error("strategy_tick RPC not configured or unreachable")
             return {
                 "inspected": 0,
                 "triggered": 0,
@@ -327,6 +332,13 @@ def strategy_tick() -> dict:
     finally:
         redis_client.delete(tick_lock_key)
 
+    logger.info(
+        "strategy_tick done inspected=%d triggered=%d skipped=%d",
+        inspected,
+        triggered,
+        skipped,
+    )
+
     return {
         "inspected": inspected,
         "triggered": triggered,
@@ -344,6 +356,7 @@ def risk_guard_tick() -> dict:
 
     w3 = _get_w3()
     if w3 is None:
+        logger.error("risk_guard_tick RPC not configured or unreachable")
         return {
             "inspected": 0,
             "alerts_sent": 0,
@@ -404,6 +417,13 @@ def risk_guard_tick() -> dict:
                 else:
                     alerts_skipped += 1
 
+    logger.info(
+        "risk_guard_tick done inspected=%d alerts_sent=%d alerts_skipped=%d",
+        inspected,
+        alerts_sent,
+        alerts_skipped,
+    )
+
     return {
         "inspected": inspected,
         "alerts_sent": alerts_sent,
@@ -435,6 +455,7 @@ def indexer_tick(self) -> dict:
     url = _resolve_subgraph_url(settings)
 
     if not url:
+        logger.warning("indexer_tick skipped: SUBGRAPH_URL not configured")
         return {
             "synced_vaults": 0,
             "synced_events": 0,
@@ -482,6 +503,15 @@ def indexer_tick(self) -> dict:
             error = f"HTTP {e.response.status_code}: {e.response.text[:200]}"
     except Exception as exc:
         error = str(exc)[:200]
+
+    if error:
+        logger.error("indexer_tick error=%s", error)
+    else:
+        logger.info(
+            "indexer_tick done synced_vaults=%d synced_events=%d",
+            synced_vaults,
+            synced_events,
+        )
 
     return {
         "synced_vaults": synced_vaults,
