@@ -17,12 +17,12 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Literal, Any, cast
+from typing import Any, Literal, cast
 
 from eth_account.signers.local import LocalAccount
 from web3 import Web3
-from web3.types import TxParams, Wei
 from web3.exceptions import ContractLogicError
+from web3.types import TxParams, Wei
 
 logger = logging.getLogger(__name__)
 
