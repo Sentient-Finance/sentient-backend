@@ -197,7 +197,7 @@ def enqueue_execution(self, vault_address: str, action: str, reason: str) -> dic
         except self.MaxRetriesExceededError:
             raise RuntimeError(
                 f"max retries exceeded: {result.error}"
-            ) from result.error
+            ) from None
 
     status = "dry_run" if result.dry_run else ("ok" if result.success else "failed")
     _persist_execution_log(
@@ -277,7 +277,7 @@ def strategy_tick() -> dict:
 
         with get_session_factory()() as db:
             vaults = db.scalars(select(Vault)).all()
-            active = _iter_active_rules(w3, vaults)
+            active = _iter_active_rules(w3, list(vaults))
             inspected = len(vaults)
             skipped = inspected - len(active)
 
@@ -357,7 +357,7 @@ def risk_guard_tick() -> dict:
 
     with get_session_factory()() as db:
         vaults = db.scalars(select(Vault)).all()
-        active = _iter_active_rules(w3, vaults)
+        active = _iter_active_rules(w3, list(vaults))
         inspected = len(vaults)
 
         feed_addrs = {r.price_feed or _ETH_USD_FEED_BASE_SEPOLIA for _, r in active}

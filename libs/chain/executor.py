@@ -21,6 +21,7 @@ from typing import Literal
 
 from eth_account.signers.local import LocalAccount
 from web3 import Web3
+from web3.types import TxParams
 from web3.exceptions import ContractLogicError
 
 logger = logging.getLogger(__name__)
@@ -153,15 +154,14 @@ def execute_vault_upkeep(
         latest = w3.eth.get_block("latest")
         base_fee = latest.get("baseFeePerGas", w3.to_wei(1, "gwei"))
         priority_fee = w3.to_wei(1, "gwei")
-        tx = fn.build_transaction(
-            {
-                "from": account.address,
-                "nonce": nonce,
-                "gas": gas_limit,
-                "maxPriorityFeePerGas": priority_fee,
-                "maxFeePerGas": base_fee * 2 + priority_fee,
-            }
-        )
+        tx_params: TxParams = {
+            "from": account.address,
+            "nonce": nonce,
+            "gas": gas_limit,
+            "maxPriorityFeePerGas": priority_fee,
+            "maxFeePerGas": base_fee * 2 + priority_fee,
+        }
+        tx = fn.build_transaction(tx_params)
         signed = account.sign_transaction(tx)
         raw_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
         # Base Sepolia block time ~2s; 60s is more than enough

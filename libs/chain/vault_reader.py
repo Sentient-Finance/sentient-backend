@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import Any, cast
 
 from web3 import Web3
 
@@ -83,14 +84,16 @@ def read_vault_token_rule(
         with w3.batch_requests() as batch:
             batch.add(contract.functions.getTokenRule(token_cs))
             batch.add(contract.functions.priceFeeds(token_cs))
-            rule, feed = batch.execute()
+            results = batch.execute()
 
+        rule, feed = cast(list[Any], results)
         enabled, buy_raw, sell_raw, last_exec, trade_amt, base_token = rule
 
         divisor = 10**_THRESHOLD_DECIMALS
         buy_usd = (buy_raw / divisor) if buy_raw > 0 else None
         sell_usd = (sell_raw / divisor) if sell_raw > 0 else None
-        feed_addr = feed if feed.lower() != _ZERO_ADDRESS else None
+        feed_str = str(feed)
+        feed_addr = feed_str if feed_str.lower() != _ZERO_ADDRESS else None
 
         return VaultTokenRule(
             vault_address=vault_address.lower(),
