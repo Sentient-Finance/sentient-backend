@@ -17,11 +17,11 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Literal, Any, cast
 
 from eth_account.signers.local import LocalAccount
 from web3 import Web3
-from web3.types import TxParams
+from web3.types import TxParams, Wei
 from web3.exceptions import ContractLogicError
 
 logger = logging.getLogger(__name__)
@@ -159,10 +159,10 @@ def execute_vault_upkeep(
             "nonce": nonce,
             "gas": gas_limit,
             "maxPriorityFeePerGas": priority_fee,
-            "maxFeePerGas": base_fee * 2 + priority_fee,
+            "maxFeePerGas": cast(Wei, base_fee * 2 + priority_fee),
         }
         tx = fn.build_transaction(tx_params)
-        signed = account.sign_transaction(tx)
+        signed = account.sign_transaction(cast(Any, tx))
         raw_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
         # Base Sepolia block time ~2s; 60s is more than enough
         receipt = w3.eth.wait_for_transaction_receipt(raw_hash, timeout=60)
