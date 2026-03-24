@@ -76,16 +76,3 @@ services:
         condition: service_healthy
       worker:
         condition: service_started
-
-  indexer:
-    <<: *backend-common
-    command: python -m apps.indexer.main --loop
-    healthcheck:
-      test: ["CMD-SHELL", "pgrep -f 'python -m apps.indexer.main --loop' || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    depends_on:
-      postgres:
-        condition: service_healthy
-

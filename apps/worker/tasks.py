@@ -10,6 +10,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
+import httpx
 from redis import Redis
 from sqlalchemy import select
 from web3 import Web3
@@ -408,4 +409,83 @@ def risk_guard_tick() -> dict:
         "alerts_sent": alerts_sent,
         "alerts_skipped": alerts_skipped,
         "at": now.isoformat(),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Indexer task
+# ---------------------------------------------------------------------------
+
+from apps.indexer.main import sync_vault_events, sync_vaults  # noqa: E402
+
+
+def _resolve_subgraph_url(settings) -> str:
+    """Use Gateway URL (with API key in path) when possible; Studio often returns 403."""
+    api_key = settings.subgraph_api_key
+    subgraph_id = settings.subgraph_id
+    if api_key and subgraph_id:
+        return f"https://gateway.thegraph.com/api/{api_key}/subgraphs/id/{subgraph_id}"
+    return settings.subgraph_url or ""
+
+
+@celery_app.task(name="worker.indexer.tick", bind=True)
+def indexer_tick(self) -> dict:
+    """Periodic indexer sync — fetches vaults + vault_events from subgraph."""
+    settings = get_settings()
+    url = _resolve_subgraph_url(settings)
+
+    if not url:
+        return {
+            "synced_vaults": 0,
+            "synced_events": 0,
+            "error": "SUBGRAPH_URL not configured",
+            "at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    session_factory = get_session_factory()
+    batch = settings.indexer_batch_size
+    chain_id = settings.chain_base_sepolia_id
+    api_key = None if "gateway.thegraph.com" in url else settings.subgraph_api_key
+
+    synced_vaults = synced_events = 0
+    error: str | None = None
+
+    try:
+        synced_vaults = sync_vaults(
+            url,
+            session_factory,
+            chain_id=chain_id,
+            batch=batch,
+            api_key=api_key,
+            verbose=False,
+        )
+        synced_events = sync_vault_events(
+            url,
+            session_factory,
+            chain_id=chain_id,
+            batch=batch,
+            api_key=api_key,
+            verbose=False,
+        )
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 403 and settings.subgraph_url:
+            # Fallback to Studio URL on Gateway 403
+            url2 = settings.subgraph_url
+            api_key2 = settings.subgraph_api_key
+            synced_vaults = sync_vaults(
+                url2, session_factory, chain_id=chain_id, batch=batch, api_key=api_key2, verbose=False
+            )
+            synced_events = sync_vault_events(
+                url2, session_factory, chain_id=chain_id, batch=batch, api_key=api_key2, verbose=False
+            )
+        else:
+            error = f"HTTP {e.response.status_code}: {e.response.text[:200]}"
+    except Exception as exc:
+        error = str(exc)[:200]
+
+    return {
+        "synced_vaults": synced_vaults,
+        "synced_events": synced_events,
+        "error": error,
+        "at": datetime.now(timezone.utc).isoformat(),
     }

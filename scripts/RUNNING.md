@@ -81,13 +81,14 @@ Mở **4 terminal riêng biệt**:
 
 ## 5. Chạy indexer (đồng bộ vault từ subgraph)
 
-```bash
-# Chạy 1 lần
-.venv/Scripts/python.exe -m apps.indexer.main
+Indexer chạy qua Celery Beat — không cần chạy thủ công.
 
-# Chạy liên tục (poll mỗi INDEXER_POLL_INTERVAL_SECONDS)
-.venv/Scripts/python.exe -m apps.indexer.main --loop
+```bash
+# Chạy 1 lần (thủ công / test)
+.venv/Scripts/python.exe -m apps.indexer.main
 ```
+
+Xem `make beat` để chạy scheduler.
 
 ---
 
@@ -132,7 +133,7 @@ docker compose -f infra/docker-compose.yml -f docker-compose.prod.yml down
 | `worker` | Celery worker xử lý queue `celery` |
 | `worker-exec` | Celery worker xử lý queue `execution` (concurrency=1) |
 | `beat` | Celery beat scheduler |
-| `indexer` | Đồng bộ vault từ subgraph (loop) |
+| `indexer` | Đồng bộ vault từ subgraph (Celery Beat, INDEXER_TICK_SECONDS) |
 
 > **Lưu ý:** Cần có file `.env` ở thư mục gốc trước khi chạy.
 

@@ -54,9 +54,10 @@ class Settings(BaseSettings):
         description="Max number of simultaneously open positions. 0 = unlimited.",
     )
 
-    indexer_poll_interval_seconds: int = Field(
+    indexer_tick_seconds: int = Field(
         default=10,
-        alias="INDEXER_POLL_INTERVAL_SECONDS",
+        alias="INDEXER_TICK_SECONDS",
+        description="Celery Beat interval for indexer sync (default 10s)",
     )
     indexer_start_block: int | None = Field(
         default=None,

@@ -7,7 +7,6 @@ Chain ID is derived from subgraph network (base-sepolia = 84532).
 
 Run:
   python -m apps.indexer.main           # one-shot sync
-  python -m apps.indexer.main --loop    # poll every INDEXER_POLL_INTERVAL_SECONDS
 """
 
 from __future__ import annotations
@@ -341,7 +340,7 @@ def _resolve_subgraph_url(settings) -> str:
     return settings.subgraph_url or ""
 
 
-def run(loop: bool = False, verbose: bool = False) -> None:
+def run(verbose: bool = False) -> None:
     settings = get_settings()
     url = _resolve_subgraph_url(settings)
     if not url:
@@ -372,12 +371,11 @@ def run(loop: bool = False, verbose: bool = False) -> None:
         )
     session_factory = get_session_factory()
     batch = settings.indexer_batch_size
-    interval = settings.indexer_poll_interval_seconds
     chain_id = settings.chain_base_sepolia_id
     # API key only needed when using SUBGRAPH_URL (Studio); Gateway has key in URL
     api_key = None if "gateway.thegraph.com" in url else settings.subgraph_api_key
 
-    def _sync_once() -> None:
+    try:
         v = sync_vaults(
             url,
             session_factory,
@@ -397,62 +395,46 @@ def run(loop: bool = False, verbose: bool = False) -> None:
         print(
             f"Synced {v} vaults, {ev} vault_events from subgraph (chain_id={chain_id})"
         )
-
-    def do_sync() -> None:
-        try:
-            _sync_once()
-        except httpx.HTTPStatusError as e:
-            if (
-                e.response.status_code == 403
-                and settings.subgraph_url
-                and "gateway.thegraph.com" in url
-            ):
-                print(
-                    "Gateway 403. Trying Studio URL with Bearer token...",
-                    file=sys.stderr,
-                )
-                url2 = settings.subgraph_url
-                api_key2 = settings.subgraph_api_key
-                v = sync_vaults(
-                    url2,
-                    session_factory,
-                    chain_id=chain_id,
-                    batch=batch,
-                    api_key=api_key2,
-                    verbose=verbose,
-                )
-                ev = sync_vault_events(
-                    url2,
-                    session_factory,
-                    chain_id=chain_id,
-                    batch=batch,
-                    api_key=api_key2,
-                    verbose=verbose,
-                )
-                print(
-                    f"Synced {v} vaults, {ev} vault_events"
-                    f" from Studio (chain_id={chain_id})"
-                )
-            else:
-                raise
-
-    if loop:
-        while True:
-            do_sync()
-            time.sleep(interval)
-    else:
-        do_sync()
+    except httpx.HTTPStatusError as e:
+        if (
+            e.response.status_code == 403
+            and settings.subgraph_url
+            and "gateway.thegraph.com" in url
+        ):
+            print(
+                "Gateway 403. Trying Studio URL with Bearer token...",
+                file=sys.stderr,
+            )
+            url2 = settings.subgraph_url
+            api_key2 = settings.subgraph_api_key
+            v = sync_vaults(
+                url2,
+                session_factory,
+                chain_id=chain_id,
+                batch=batch,
+                api_key=api_key2,
+                verbose=verbose,
+            )
+            ev = sync_vault_events(
+                url2,
+                session_factory,
+                chain_id=chain_id,
+                batch=batch,
+                api_key=api_key2,
+                verbose=verbose,
+            )
+            print(
+                f"Synced {v} vaults, {ev} vault_events"
+                f" from Studio (chain_id={chain_id})"
+            )
+        else:
+            raise
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--loop",
-        action="store_true",
-        help="Poll subgraph every INDEXER_POLL_INTERVAL_SECONDS",
-    )
-    parser.add_argument(
         "-v", "--verbose", action="store_true", help="Print received/inserted counts"
     )
     args = parser.parse_args()
-    run(loop=args.loop, verbose=args.verbose)
+    run(verbose=args.verbose)

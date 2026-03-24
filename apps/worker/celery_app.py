@@ -31,6 +31,10 @@ def make_celery() -> Celery:
                 "task": "worker.risk_guard.tick",
                 "schedule": settings.risk_tick_seconds,
             },
+            "indexer-tick": {
+                "task": "worker.indexer.tick",
+                "schedule": settings.indexer_tick_seconds,
+            },
         },
     )
     return app
