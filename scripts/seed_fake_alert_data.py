@@ -22,12 +22,12 @@ from libs.db.session import get_session_factory
 FAKE_VAULT_ADDRESS = "0xDEADBEEFdeadbeefDEADBEEFdeadbeefDEADBEEF"
 CHAIN_ID = 1
 
-BUY_THRESHOLD = 2000.0   # alert khi price <= 2000
+BUY_THRESHOLD = 2000.0  # alert khi price <= 2000
 SELL_THRESHOLD = 3000.0  # alert khi price >= 3000
 
 # Đặt price nằm trong vùng trigger
-PRICE_FOR_BUY_ALERT = 1900.0    # < BUY_THRESHOLD → trigger BUY
-PRICE_FOR_SELL_ALERT = 3100.0   # > SELL_THRESHOLD → trigger SELL
+PRICE_FOR_BUY_ALERT = 1900.0  # < BUY_THRESHOLD → trigger BUY
+PRICE_FOR_SELL_ALERT = 3100.0  # > SELL_THRESHOLD → trigger SELL
 
 
 def _make_vault_event(event_type: str, payload: dict, block: int) -> VaultEvent:
@@ -53,7 +53,11 @@ def seed(action: str = "buy", clean: bool = False) -> None:
             print("Cleaned existing fake data.")
 
         # Upsert Vault
-        vault = db.query(Vault).filter_by(address=FAKE_VAULT_ADDRESS, chain_id=CHAIN_ID).first()
+        vault = (
+            db.query(Vault)
+            .filter_by(address=FAKE_VAULT_ADDRESS, chain_id=CHAIN_ID)
+            .first()
+        )
         if not vault:
             vault = Vault(
                 chain_id=CHAIN_ID,
@@ -85,7 +89,9 @@ def seed(action: str = "buy", clean: bool = False) -> None:
                 block=3000,
             )
             db.add(price_event)
-            print(f"Seeded PriceObserved price={PRICE_FOR_BUY_ALERT} (< buy_threshold={BUY_THRESHOLD}) → will trigger BUY alert")
+            print(
+                f"Seeded PriceObserved price={PRICE_FOR_BUY_ALERT} (< buy_threshold={BUY_THRESHOLD}) → will trigger BUY alert"
+            )
 
         if action == "sell":
             price_event = _make_vault_event(
@@ -94,11 +100,15 @@ def seed(action: str = "buy", clean: bool = False) -> None:
                 block=3000,
             )
             db.add(price_event)
-            print(f"Seeded PriceObserved price={PRICE_FOR_SELL_ALERT} (>= sell_threshold={SELL_THRESHOLD}) → will trigger SELL alert")
+            print(
+                f"Seeded PriceObserved price={PRICE_FOR_SELL_ALERT} (>= sell_threshold={SELL_THRESHOLD}) → will trigger SELL alert"
+            )
 
         db.commit()
         print("\nDone! Now run:")
-        print("  python -c \"from apps.worker.tasks import risk_guard_tick; print(risk_guard_tick())\"")
+        print(
+            '  python -c "from apps.worker.tasks import risk_guard_tick; print(risk_guard_tick())"'
+        )
         print("\nNếu alert đã bị dedupe trong Redis, xóa key trước:")
         print(f"  redis-cli del risk_alert:{FAKE_VAULT_ADDRESS}:price_buy_threshold")
         print(f"  redis-cli del risk_alert:{FAKE_VAULT_ADDRESS}:price_sell_threshold")

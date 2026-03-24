@@ -193,9 +193,14 @@ def estimate_ccip_fee(
     try:
         fee = contract.functions.getFee(body.destination_chain_selector, message).call()
     except ContractLogicError:
-        raise HTTPException(status_code=400, detail="getFee reverted: contract rejected the message parameters") from None
+        raise HTTPException(
+            status_code=400,
+            detail="getFee reverted: contract rejected the message parameters",
+        ) from None
     except Exception:
-        raise HTTPException(status_code=503, detail="RPC error estimating CCIP fee") from None
+        raise HTTPException(
+            status_code=503, detail="RPC error estimating CCIP fee"
+        ) from None
 
     fee_eth = format(Decimal(w3.from_wei(fee, "ether")), "f")
     return EstimateFeeResponse(fee_wei=str(fee), fee_eth=fee_eth)

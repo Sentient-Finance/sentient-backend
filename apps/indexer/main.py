@@ -106,12 +106,21 @@ def _graphql_request(
             if attempt == _MAX_RETRIES - 1:
                 raise
             wait = 2**attempt
-            print(f"Network error ({exc}), retry {attempt + 1}/{_MAX_RETRIES} in {wait}s", file=sys.stderr)
+            print(
+                f"Network error ({exc}), retry {attempt + 1}/{_MAX_RETRIES} in {wait}s",
+                file=sys.stderr,
+            )
             time.sleep(wait)
         except httpx.HTTPStatusError as e:
-            if e.response.status_code in _RETRYABLE_STATUS and attempt < _MAX_RETRIES - 1:
+            if (
+                e.response.status_code in _RETRYABLE_STATUS
+                and attempt < _MAX_RETRIES - 1
+            ):
                 wait = 2**attempt
-                print(f"HTTP {e.response.status_code}, retry {attempt + 1}/{_MAX_RETRIES} in {wait}s", file=sys.stderr)
+                print(
+                    f"HTTP {e.response.status_code}, retry {attempt + 1}/{_MAX_RETRIES} in {wait}s",
+                    file=sys.stderr,
+                )
                 time.sleep(wait)
                 continue
             if e.response.status_code == 403:

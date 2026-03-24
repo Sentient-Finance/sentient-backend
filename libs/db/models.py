@@ -75,7 +75,9 @@ class ExecutionLog(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     vault_address: Mapped[str] = mapped_column(String(64), index=True)
     action: Mapped[str] = mapped_column(String(16))  # "buy" | "sell"
-    status: Mapped[str] = mapped_column(String(16))  # "ok" | "failed" | "skipped" | "dry_run"
+    status: Mapped[str] = mapped_column(
+        String(16)
+    )  # "ok" | "failed" | "skipped" | "dry_run"
     tx_hash: Mapped[str | None] = mapped_column(String(80), nullable=True)
     dry_run: Mapped[bool] = mapped_column(Boolean, default=False)
     error: Mapped[str | None] = mapped_column(String(500), nullable=True)

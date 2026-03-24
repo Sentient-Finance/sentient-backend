@@ -1,4 +1,4 @@
-.PHONY: help venv install install-prod dev lint fix format type-check test db-up db-down migrate revision downgrade indexer worker prod-up prod-down prod-logs
+.PHONY: help venv install install-prod dev lint fix format type-check test db-up db-down migrate revision downgrade indexer worker prod-up prod-down prod-logs setup-hooks
 
 SHELL := bash
 
@@ -39,6 +39,7 @@ help:
 	"  make worker          Run worker module" \
 	"  make worker-execution Run execution worker module" \
 	"  make beat            Run celery beat" \
+	"  make setup-hooks     Install pre-commit hooks"
 
 venv:
 	python -m venv "$(VENV_DIR)"
@@ -107,3 +108,6 @@ worker-execution:
 
 beat:
 	$(PY) -m celery -A apps.worker.celery_app beat -l info
+
+setup-hooks:
+	$(PY) -m pre_commit install

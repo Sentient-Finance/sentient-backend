@@ -30,6 +30,7 @@ dev = [
   "pytest>=8.0.0",
   "pytest-asyncio>=0.23.0",
   "mypy>=1.8.0",
+  "pre-commit>=3.6.0",
 ]
 
 [tool.setuptools]
@@ -51,6 +52,7 @@ ignore = ["E501"]
 [tool.black]
 line-length = 88
 target-version = ["py311"]
+extend-exclude = "/alembic"
 
 [tool.pytest.ini_options]
 minversion = "8.0"

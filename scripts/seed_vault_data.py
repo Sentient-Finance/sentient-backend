@@ -30,11 +30,36 @@ VAULT_CREATED_BLOCK = 38569286  # VaultInitialized block
 VAULT_CREATED_TX = "0x9c0f12a8532140ef96e23b4b3d0ff0590743fcf3012e217c51fe7f42ccf0618c"
 
 EVENTS = [
-    ("0x7305a6f9c104a79231545fd8fcd68d40c394eb3738a6740efcf8547e02f06bc8", 67, "TokenDeposited", 38570295),
-    ("0x9c0f12a8532140ef96e23b4b3d0ff0590743fcf3012e217c51fe7f42ccf0618c", 151, "VaultInitialized", 38569286),
-    ("0xb0125ac2fbba86c41c3d910d829d9f04b11ff47270d666d39c1cb66f52438a94", 173, "TokenDeposited", 38570437),
-    ("0xb700125e525e8621849deeaee9672eb1fec33d4f84937cfc5e0cd2e78b42ad50", 47, "TokenRuleSet", 38570571),
-    ("0xc059a78b467d94c13d51bbdcb8bcf29cab547a7b6d2b29b1890e15fc9b4dea0e", 112, "TokenDeposited", 38570446),
+    (
+        "0x7305a6f9c104a79231545fd8fcd68d40c394eb3738a6740efcf8547e02f06bc8",
+        67,
+        "TokenDeposited",
+        38570295,
+    ),
+    (
+        "0x9c0f12a8532140ef96e23b4b3d0ff0590743fcf3012e217c51fe7f42ccf0618c",
+        151,
+        "VaultInitialized",
+        38569286,
+    ),
+    (
+        "0xb0125ac2fbba86c41c3d910d829d9f04b11ff47270d666d39c1cb66f52438a94",
+        173,
+        "TokenDeposited",
+        38570437,
+    ),
+    (
+        "0xb700125e525e8621849deeaee9672eb1fec33d4f84937cfc5e0cd2e78b42ad50",
+        47,
+        "TokenRuleSet",
+        38570571,
+    ),
+    (
+        "0xc059a78b467d94c13d51bbdcb8bcf29cab547a7b6d2b29b1890e15fc9b4dea0e",
+        112,
+        "TokenDeposited",
+        38570446,
+    ),
 ]
 
 
@@ -80,7 +105,9 @@ def seed(clean: bool = False) -> None:
     print(f"Fetching block timestamps from {rpc_url}...")
     try:
         vault_created_ts = get_ts(VAULT_CREATED_BLOCK)
-        print(f"  Block {VAULT_CREATED_BLOCK}: {datetime.fromtimestamp(vault_created_ts, tz=timezone.utc).isoformat()}")
+        print(
+            f"  Block {VAULT_CREATED_BLOCK}: {datetime.fromtimestamp(vault_created_ts, tz=timezone.utc).isoformat()}"
+        )
     except Exception as e:
         print(f"Error fetching block timestamps: {e}", file=sys.stderr)
         sys.exit(1)
@@ -95,7 +122,9 @@ def seed(clean: bool = False) -> None:
             print(f"Cleaned vaults + vault_events for chain_id={chain_id}")
 
         # Vault
-        existing = db.query(Vault).filter_by(address=VAULT_ADDRESS, chain_id=chain_id).first()
+        existing = (
+            db.query(Vault).filter_by(address=VAULT_ADDRESS, chain_id=chain_id).first()
+        )
         if not existing:
             db.add(
                 Vault(
@@ -103,7 +132,9 @@ def seed(clean: bool = False) -> None:
                     address=VAULT_ADDRESS.lower(),
                     created_block_number=VAULT_CREATED_BLOCK,
                     created_tx_hash=VAULT_CREATED_TX.lower(),
-                    created_timestamp=datetime.fromtimestamp(vault_created_ts, tz=timezone.utc),
+                    created_timestamp=datetime.fromtimestamp(
+                        vault_created_ts, tz=timezone.utc
+                    ),
                 )
             )
             db.commit()
@@ -116,7 +147,9 @@ def seed(clean: bool = False) -> None:
         for tx_hash, log_idx, event_type, block_num in EVENTS:
             exists = (
                 db.query(VaultEvent)
-                .filter_by(chain_id=chain_id, tx_hash=tx_hash.lower(), log_index=log_idx)
+                .filter_by(
+                    chain_id=chain_id, tx_hash=tx_hash.lower(), log_index=log_idx
+                )
                 .first()
             )
             if not exists:
