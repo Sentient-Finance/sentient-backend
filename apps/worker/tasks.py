@@ -494,10 +494,20 @@ def indexer_tick(self) -> dict:
             url2 = settings.subgraph_url
             api_key2 = settings.subgraph_api_key
             synced_vaults = sync_vaults(
-                url2, session_factory, chain_id=chain_id, batch=batch, api_key=api_key2, verbose=False
+                url2,
+                session_factory,
+                chain_id=chain_id,
+                batch=batch,
+                api_key=api_key2,
+                verbose=False,
             )
             synced_events = sync_vault_events(
-                url2, session_factory, chain_id=chain_id, batch=batch, api_key=api_key2, verbose=False
+                url2,
+                session_factory,
+                chain_id=chain_id,
+                batch=batch,
+                api_key=api_key2,
+                verbose=False,
             )
         else:
             error = f"HTTP {e.response.status_code}: {e.response.text[:200]}"

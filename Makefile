@@ -79,6 +79,7 @@ venv:
 
 install:
 	$(PIP) install -e ".[dev]"
+	$(PY) -m pre_commit install
 
 install-prod:
 	$(PIP) install -e .
