@@ -1,4 +1,4 @@
-.PHONY: help venv install install-prod dev lint fix format type-check test db-up db-down migrate revision downgrade indexer worker prod-up prod-down prod-logs setup-hooks
+.PHONY: help venv install install-prod dev lint fix format type-check test db-up db-down migrate revision downgrade indexer indexer-cron worker prod-up prod-down prod-logs setup-hooks
 
 SHELL := bash
 
@@ -35,7 +35,8 @@ help:
 	"  make migrate         Alembic upgrade head" \
 	"  make revision MSG=   Create Alembic revision" \
 	"  make downgrade REV=  Alembic downgrade (default -1)" \
-	"  make indexer         Run indexer module" \
+	"  make indexer         Run indexer (one-shot)" \
+	"  make indexer-cron   Run indexer via docker (for system cron)" \
 	"  make worker          Run worker module" \
 	"  make worker-execution Run execution worker module" \
 	"  make beat            Run celery beat" \
@@ -62,6 +63,9 @@ fix:
 
 format:
 	$(PY) -m black .
+
+check-format:
+	$(PY) -m black --check .
 
 type-check:
 	$(PY) -m mypy apps libs
@@ -98,7 +102,11 @@ downgrade:
 	$(PY) -m alembic downgrade "$(REV)"
 
 indexer:
-	$(PY) -m apps.indexer.main --loop
+	$(PY) -m apps.indexer.main -v
+
+# Run indexer as a one-shot via docker (for system cron)
+indexer-cron:
+	docker compose --project-directory . -f infra/docker-compose.yml -f docker-compose.prod.yml run --rm api python -m apps.indexer.main -v
 
 worker:
 	$(PY) -m celery -A apps.worker.celery_app worker -l info -Q celery
