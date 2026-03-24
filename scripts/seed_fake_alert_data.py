@@ -14,7 +14,6 @@ Options:
 from __future__ import annotations
 
 import argparse
-import json
 from datetime import datetime, timezone
 
 from libs.db.models import Vault, VaultEvent

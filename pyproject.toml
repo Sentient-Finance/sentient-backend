@@ -46,7 +46,7 @@ extend-exclude = ["alembic"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
-ignore = []
+ignore = ["E501"]
 
 [tool.black]
 line-length = 88
