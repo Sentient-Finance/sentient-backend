@@ -195,9 +195,7 @@ def enqueue_execution(self, vault_address: str, action: str, reason: str) -> dic
         try:
             self.retry(countdown=30, exc=RuntimeError(result.error))
         except self.MaxRetriesExceededError:
-            raise RuntimeError(
-                f"max retries exceeded: {result.error}"
-            ) from None
+            raise RuntimeError(f"max retries exceeded: {result.error}") from None
 
     status = "dry_run" if result.dry_run else ("ok" if result.success else "failed")
     _persist_execution_log(
