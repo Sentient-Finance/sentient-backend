@@ -7,10 +7,13 @@ PORT ?= 8001
 MSG ?=
 REV ?= -1
 
-ifeq ($(wildcard $(VENV_DIR)/Scripts/python.exe),$(VENV_DIR)/Scripts/python.exe)
-PY := $(VENV_DIR)/Scripts/python.exe
+# Detect python executable
+ifneq ($(wildcard $(VENV_DIR)/Scripts/python.exe),)
+    PY := $(VENV_DIR)/Scripts/python.exe
+else ifneq ($(wildcard $(VENV_DIR)/bin/python),)
+    PY := $(VENV_DIR)/bin/python
 else
-PY := $(VENV_DIR)/bin/python
+    PY := python3
 endif
 
 PIP := $(PY) -m pip
