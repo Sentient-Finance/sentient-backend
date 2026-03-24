@@ -41,7 +41,7 @@ services:
     image: prom/prometheus:latest
     restart: unless-stopped
     volumes:
-      - ./infra/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -62,7 +62,7 @@ services:
       - "127.0.0.1:3005:3000"
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./infra/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yaml
+      - ./grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yaml
     depends_on:
       - prometheus
       - loki
@@ -77,7 +77,7 @@ services:
     ports:
       - "127.0.0.1:3100:3100"
     volumes:
-      - ./infra/loki-config.yml:/etc/loki/local-config.yaml
+      - ./loki-config.yml:/etc/loki/local-config.yaml
       - loki_data:/loki
     command: -config.file=/etc/loki/local-config.yaml
     deploy:
@@ -89,7 +89,7 @@ services:
     image: grafana/promtail:latest
     restart: unless-stopped
     volumes:
-      - ./infra/promtail-config.yml:/etc/promtail/config.yml
+      - ./promtail-config.yml:/etc/promtail/config.yml
       - /var/run/docker.sock:/var/run/docker.sock
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/log:/var/log:ro
