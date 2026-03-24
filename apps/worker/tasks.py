@@ -138,8 +138,21 @@ def enqueue_execution(self, vault_address: str, action: str, reason: str) -> dic
         if w3 is None:
             missing.append("BASE_RPC_URL / ETH_RPC_URL")
         detail = f"executor not configured — missing: {', '.join(missing)}"
-        _persist_execution_log(vault_address, action, "skipped", reason=reason, error=detail, executed_at=now)
-        return {"vault": vault_address, "action": action, "status": "skipped", "detail": detail, "at": now.isoformat()}
+        _persist_execution_log(
+            vault_address,
+            action,
+            "skipped",
+            reason=reason,
+            error=detail,
+            executed_at=now,
+        )
+        return {
+            "vault": vault_address,
+            "action": action,
+            "status": "skipped",
+            "detail": detail,
+            "at": now.isoformat(),
+        }
 
     # Load Account here so the raw key never travels through function call chains
     account = w3.eth.account.from_key(settings.executor_private_key)
@@ -152,22 +165,60 @@ def enqueue_execution(self, vault_address: str, action: str, reason: str) -> dic
         dry_run=settings.executor_dry_run,
     )
 
-    executed_at = datetime.fromisoformat(result.performed_at) if result.performed_at else now
+    executed_at = (
+        datetime.fromisoformat(result.performed_at) if result.performed_at else now
+    )
 
     if not result.upkeep_needed:
-        _persist_execution_log(vault_address, action, "skipped", reason=reason, executed_at=executed_at)
-        return {"vault": vault_address, "action": action, "status": "skipped", "detail": "checkUpkeep returned false — no swap needed", "at": result.performed_at}
+        _persist_execution_log(
+            vault_address, action, "skipped", reason=reason, executed_at=executed_at
+        )
+        return {
+            "vault": vault_address,
+            "action": action,
+            "status": "skipped",
+            "detail": "checkUpkeep returned false — no swap needed",
+            "at": result.performed_at,
+        }
 
     if not result.success and not result.dry_run:
-        _persist_execution_log(vault_address, action, "failed", tx_hash=result.tx_hash, error=result.error, dry_run=result.dry_run, reason=reason, executed_at=executed_at)
+        _persist_execution_log(
+            vault_address,
+            action,
+            "failed",
+            tx_hash=result.tx_hash,
+            error=result.error,
+            dry_run=result.dry_run,
+            reason=reason,
+            executed_at=executed_at,
+        )
         try:
             self.retry(countdown=30, exc=RuntimeError(result.error))
         except self.MaxRetriesExceededError:
-            return {"vault": vault_address, "action": action, "status": "failed", "detail": "max retries exceeded", "error": result.error, "at": result.performed_at}
+            raise RuntimeError(
+                f"max retries exceeded: {result.error}"
+            ) from result.error
 
     status = "dry_run" if result.dry_run else ("ok" if result.success else "failed")
-    _persist_execution_log(vault_address, action, status, tx_hash=result.tx_hash, error=result.error, dry_run=result.dry_run, reason=reason, executed_at=executed_at)
-    return {"vault": vault_address, "action": action, "status": status, "tx_hash": result.tx_hash, "dry_run": result.dry_run, "error": result.error, "at": result.performed_at}
+    _persist_execution_log(
+        vault_address,
+        action,
+        status,
+        tx_hash=result.tx_hash,
+        error=result.error,
+        dry_run=result.dry_run,
+        reason=reason,
+        executed_at=executed_at,
+    )
+    return {
+        "vault": vault_address,
+        "action": action,
+        "status": status,
+        "tx_hash": result.tx_hash,
+        "dry_run": result.dry_run,
+        "error": result.error,
+        "at": result.performed_at,
+    }
 
 
 @celery_app.task(name="worker.notify.telegram")

@@ -177,13 +177,13 @@ def get_vault_history(
 
     normalized = _normalize_address(address)
 
-    vault_exists_stmt = select(Vault.id).where(Vault.address == normalized)
+    vault_exists_stmt = select(Vault.id).where(func.lower(Vault.address) == normalized)
     if chain_id is not None:
         vault_exists_stmt = vault_exists_stmt.where(Vault.chain_id == chain_id)
     if db.scalar(vault_exists_stmt.limit(1)) is None:
         raise HTTPException(status_code=404, detail="vault not found")
 
-    filters = [VaultEvent.vault_address == normalized]
+    filters = [func.lower(VaultEvent.vault_address) == normalized]
     if chain_id is not None:
         filters.append(VaultEvent.chain_id == chain_id)
     if event_type:
@@ -231,7 +231,7 @@ def get_vault(
 ):
     normalized = _normalize_address(address)
 
-    stmt = select(Vault).where(Vault.address == normalized)
+    stmt = select(Vault).where(func.lower(Vault.address) == normalized)
     if chain_id is not None:
         stmt = stmt.where(Vault.chain_id == chain_id)
 
@@ -246,7 +246,7 @@ def get_vault(
     vault = rows[0]
 
     event_filters = [
-        VaultEvent.vault_address == normalized,
+        func.lower(VaultEvent.vault_address) == normalized,
         VaultEvent.chain_id == vault.chain_id,
     ]
 
