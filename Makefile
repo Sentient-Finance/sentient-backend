@@ -1,4 +1,4 @@
-.PHONY: help venv install install-prod dev lint fix format test db-up db-down migrate revision downgrade indexer worker prod-up prod-down prod-logs
+.PHONY: help venv install install-prod dev lint fix format type-check test db-up db-down migrate revision downgrade indexer worker prod-up prod-down prod-logs
 
 SHELL := bash
 
@@ -25,6 +25,7 @@ help:
 	"  make lint            Ruff check" \
 	"  make fix             Ruff check --fix" \
 	"  make format          Black format" \
+	"  make type-check      Mypy type check" \
 	"  make test            Pytest" \
 	"  make db-up           Start Postgres/Redis (docker compose)" \
 	"  make db-down         Stop Postgres/Redis" \
@@ -57,6 +58,9 @@ fix:
 
 format:
 	$(PY) -m black .
+
+type-check:
+	$(PY) -m mypy apps libs
 
 test:
 	$(PY) -m pytest
