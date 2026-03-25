@@ -1,0 +1,15 @@
+name: PR Template
+
+on:
+  pull_request:
+    types: [opened]
+
+jobs:
+  fill-pr-template:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update PR body with template
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr edit ${{ github.event.pull_request.number }} --body-file .github/pull_request_template.md
