@@ -7,6 +7,11 @@ on:
 jobs:
   fill-pr-template:
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+
     steps:
       - name: Update PR body with template
         env:

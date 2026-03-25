@@ -1,39 +1,42 @@
 name: CI
- 
+
 on:
   push:
     branches: [ "main", "master", "develop" ]
   pull_request:
     branches: [ "main", "master", "develop" ]
   workflow_dispatch:
- 
+
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
- 
+
+    permissions:
+      contents: read
+
     steps:
       - uses: actions/checkout@v4
- 
+
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: "pip"
- 
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           make install
- 
+
       - name: Lint with ruff
         run: make lint
- 
+
       - name: Check formatting with black
         run: make check-format
- 
+
       - name: Type check with mypy
         run: make type-check
- 
+
       - name: Run tests
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
