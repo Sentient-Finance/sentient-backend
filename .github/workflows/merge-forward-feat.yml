@@ -1,0 +1,164 @@
+name: Merge-forward skill branches
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  merge-forward:
+    if: github.repository == 'Sentient-Finance/sentient-backend'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge main into each feat branch
+        id: merge
+        run: |
+          FAILED=""
+          SUCCEEDED=""
+
+          # List all remote feat branches
+          mapfile -t FEAT_BRANCHES < <(git branch -r --list 'origin/feat/*' | sed 's|origin/||' | tr -d ' ')
+
+          if [ -z "$FEAT_BRANCHES" ]; then
+            echo "No feat branches found."
+            exit 0
+          fi
+
+          for BRANCH in $FEAT_BRANCHES; do
+            FEAT_NAME=$(echo "$BRANCH" | sed 's|feat/||')
+            echo ""
+            echo "=== Processing $BRANCH ==="
+
+            # Checkout the feat branch
+            git checkout -B "$BRANCH" "origin/$BRANCH"
+
+            # Attempt merge
+            if ! git merge main --no-edit; then
+              echo "::warning::Merge conflict in $BRANCH"
+              git merge --abort || true
+              FAILED="$FAILED $FEAT_NAME"
+              continue
+            fi
+
+            # Check if there's anything new to push
+            if git diff --quiet "origin/$BRANCH"; then
+              echo "$BRANCH is already up to date with main."
+              SUCCEEDED="$SUCCEEDED $FEAT_NAME"
+              continue
+            fi
+
+            # Install deps and validate
+            make install
+
+            if ! make check-format; then
+              echo "::warning::Format check failed for $BRANCH"
+              git reset --hard "origin/$BRANCH"
+              FAILED="$FAILED $FEAT_NAME"
+              continue
+            fi
+
+            if ! make type-check; then
+              echo "::warning::Type check failed for $BRANCH"
+              git reset --hard "origin/$BRANCH"
+              FAILED="$FAILED $FEAT_NAME"
+              continue
+            fi
+
+            if ! make test; then
+              echo "::warning::Tests failed for $BRANCH"
+              git reset --hard "origin/$BRANCH"
+              FAILED="$FAILED $FEAT_NAME"
+              continue
+            fi
+
+            # Push the updated branch
+            git push origin "$BRANCH"
+            SUCCEEDED="$SUCCEEDED $FEAT_NAME"
+            echo "$BRANCH merged and pushed successfully."
+          done
+
+          echo ""
+          echo "=== Results ==="
+          echo "Succeeded: $SUCCEEDED"
+          echo "Failed: $FAILED"
+
+          # Export for issue creation
+          echo "failed=$FAILED" >> "$GITHUB_OUTPUT"
+          echo "succeeded=$SUCCEEDED" >> "$GITHUB_OUTPUT"
+
+      - name: Open issue for failed merges
+        if: steps.merge.outputs.failed != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const failed = '${{ steps.merge.outputs.failed }}'.trim().split(/\s+/);
+            const sha = context.sha.substring(0, 7);
+            const body = [
+              `The merge-forward workflow failed to merge \`main\` (${sha}) into the following feat branches:`,
+              '',
+              ...failed.map(s => `- \`feat/${s}\`: merge conflict, build failure, or test failure`),
+              '',
+              'Please resolve manually:',
+              '```bash',
+              ...failed.map(s => [
+                `git checkout feat/${s}`,
+                `git merge main`,
+                `# resolve conflicts, then: git push`,
+                ''
+              ]).flat(),
+              '```',
+              '',
+              `Triggered by push to main: ${context.sha}`
+            ].join('\n');
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Merge-forward failed for ${failed.length} feat branch(es) after ${sha}`,
+              body,
+              labels: ['skill-maintenance']
+            });
+
+      - name: Notify channel forks
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.FORK_DISPATCH_TOKEN || secrets.GITHUB_TOKEN }}
+          script: |
+            // TODO: Add fork repo names for this project
+            const forks = [
+              // 'fork-repo-name',
+            ];
+            const sha = context.sha.substring(0, 7);
+            for (const repo of forks) {
+              try {
+                await github.rest.repos.createDispatchEvent({
+                  owner: context.repo.owner,
+                  repo,
+                  event_type: 'upstream-main-updated',
+                  client_payload: { sha: context.sha },
+                });
+                console.log(`Notified ${repo}`);
+              } catch (e) {
+                console.log(`Failed to notify ${repo}: ${e.message}`);
+              }
+            }

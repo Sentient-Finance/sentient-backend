@@ -1,4 +1,4 @@
-from celery import Celery
+from celery import Celery  # type: ignore[import-untyped]
 
 from libs.core.config import get_settings
 
@@ -17,6 +17,11 @@ def make_celery() -> Celery:
         accept_content=["json"],
         timezone="UTC",
         enable_utc=True,
+        # Route execution tasks to a dedicated single-concurrency queue
+        # so all performUpkeep calls are sequential → no nonce collision.
+        task_routes={
+            "worker.execution.enqueue": {"queue": "execution"},
+        },
         beat_schedule={
             "strategy-tick": {
                 "task": "worker.strategy.tick",
@@ -25,6 +30,10 @@ def make_celery() -> Celery:
             "risk-guard-tick": {
                 "task": "worker.risk_guard.tick",
                 "schedule": settings.risk_tick_seconds,
+            },
+            "indexer-tick": {
+                "task": "worker.indexer.tick",
+                "schedule": settings.indexer_tick_seconds,
             },
         },
     )

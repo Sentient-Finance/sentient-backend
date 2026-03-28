@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     postgres_port: int = Field(default=5432, alias="POSTGRES_PORT")
     postgres_db: str = Field(default="sentient", alias="POSTGRES_DB")
     postgres_user: str = Field(default="sentient", alias="POSTGRES_USER")
-    postgres_password: str = Field(default="sentient", alias="POSTGRES_PASSWORD")
+    postgres_password: str = Field(default="", alias="POSTGRES_PASSWORD")
 
     redis_url: str = Field(
         default="redis://127.0.0.1:6379/0",
@@ -41,19 +41,23 @@ class Settings(BaseSettings):
     max_notional_per_trade: float = Field(
         default=0.0,
         alias="MAX_NOTIONAL_PER_TRADE",
+        description="Max USD notional per single trade. 0.0 = unlimited (no cap enforced).",
     )
     max_daily_notional: float = Field(
         default=0.0,
         alias="MAX_DAILY_NOTIONAL",
+        description="Max USD notional across all trades in a rolling 24-hour window. 0.0 = unlimited.",
     )
     max_open_positions: int = Field(
         default=0,
         alias="MAX_OPEN_POSITIONS",
+        description="Max number of simultaneously open positions. 0 = unlimited.",
     )
 
-    indexer_poll_interval_seconds: int = Field(
+    indexer_tick_seconds: int = Field(
         default=10,
-        alias="INDEXER_POLL_INTERVAL_SECONDS",
+        alias="INDEXER_TICK_SECONDS",
+        description="Celery Beat interval for indexer sync (default 10s)",
     )
     indexer_start_block: int | None = Field(
         default=None,
@@ -92,13 +96,30 @@ class Settings(BaseSettings):
         default=60,
         alias="RISK_TICK_SECONDS",
     )
+    execution_cooldown_seconds: int = Field(
+        default=3600,
+        alias="EXECUTION_COOLDOWN_SECONDS",
+        description="Min seconds between same-action executions on the same vault",
+    )
     stale_price_seconds: int = Field(
-        default=180,
+        default=3600,
         alias="STALE_PRICE_SECONDS",
+        description="Chainlink testnet feeds update ~hourly; mainnet use 180",
     )
     alert_dedupe_seconds: int = Field(
         default=300,
         alias="ALERT_DEDUPE_SECONDS",
+    )
+
+    rate_limit_public: str = Field(
+        default="60/minute",
+        alias="RATE_LIMIT_PUBLIC",
+        description="Rate limit for standard public APIs",
+    )
+    rate_limit_heavy: str = Field(
+        default="20/minute",
+        alias="RATE_LIMIT_HEAVY",
+        description="Rate limit for heavy RPC/write APIs",
     )
 
     allowed_origins: list[str] = Field(
@@ -108,12 +129,35 @@ class Settings(BaseSettings):
 
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
 
+    # Executor wallet — signs & sends executeSwap transactions
+    executor_private_key: str | None = Field(
+        default=None,
+        alias="EXECUTOR_PRIVATE_KEY",
+        description="Hex private key of the on-chain executor wallet",
+    )
+    executor_dry_run: bool = Field(
+        default=True,
+        alias="EXECUTOR_DRY_RUN",
+        description="If True, simulate via eth_call only — no real transactions sent",
+    )
+    executor_gas_limit: int = Field(
+        default=350_000,
+        alias="EXECUTOR_GAS_LIMIT",
+    )
+    # Base token used as the swap counter-asset (USDC on Base Sepolia by default)
+    base_token_address: str = Field(
+        default="0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+        alias="BASE_TOKEN_ADDRESS",
+        description="ERC-20 address of the base/quote token (USDC on Base Sepolia)",
+    )
+
     @property
     def sqlalchemy_database_uri(self) -> str:
         if self.database_url:
             url = self.database_url
-            if url.startswith("postgresql://") or url.startswith("postgres://"):
+            if url.startswith("postgresql://"):
                 url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+            elif url.startswith("postgres://"):
                 url = url.replace("postgres://", "postgresql+psycopg://", 1)
             return url
 
@@ -126,4 +170,3 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
-

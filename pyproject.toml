@@ -20,6 +20,7 @@ dependencies = [
   "redis>=6.4.0",
   "celery>=5.5.0",
   "web3>=7.13.0",
+  "slowapi>=0.1.9",
 ]
 
 [project.optional-dependencies]
@@ -29,6 +30,8 @@ dev = [
   "pytest>=8.0.0",
   "pytest-asyncio>=0.23.0",
   "mypy>=1.8.0",
+  "pre-commit>=3.6.0",
+  "honcho>=1.1.0",
 ]
 
 [tool.setuptools]
@@ -45,11 +48,12 @@ extend-exclude = ["alembic"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
-ignore = []
+ignore = ["E501"]
 
 [tool.black]
 line-length = 88
 target-version = ["py311"]
+extend-exclude = "/alembic"
 
 [tool.pytest.ini_options]
 minversion = "8.0"

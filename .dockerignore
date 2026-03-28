@@ -13,3 +13,8 @@ docs/
 contract/
 subgraph-base-testnet/
 tests/
+*.md
+Makefile
+Procfile
+docker-compose*.yml
+scripts/
