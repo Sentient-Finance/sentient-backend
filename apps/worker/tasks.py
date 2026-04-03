@@ -577,15 +577,12 @@ def check_price_alerts(self) -> dict:
     """Check all active price alerts and trigger notifications/actions."""
     from libs.db.models import PriceAlert
 
-    w3 = _get_w3()
-    settings = get_settings()
-
     triggered_count = 0
     errors = []
 
     try:
         with get_session_factory()() as db:
-            alerts = db.query(PriceAlert).filter(PriceAlert.is_active == True).all()
+            alerts = db.query(PriceAlert).filter(PriceAlert.is_active).all()
 
             for alert in alerts:
                 try:
