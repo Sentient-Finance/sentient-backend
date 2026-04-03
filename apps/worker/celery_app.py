@@ -35,6 +35,10 @@ def make_celery() -> Celery:
                 "task": "worker.indexer.tick",
                 "schedule": settings.indexer_tick_seconds,
             },
+            "check-price-alerts": {
+                "task": "worker.alerts.check",
+                "schedule": 60.0,  # every 60 seconds
+            },
         },
     )
     return app

@@ -529,3 +529,121 @@ def indexer_tick(self) -> dict:
         "error": error,
         "at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@celery_app.task(name="worker.notify.send")
+def notify_send(recipient_id: str, channel_type: str, message: str) -> dict:
+    """Gửi notification qua đúng channel."""
+    settings = get_settings()
+    if channel_type == "telegram":
+        if not settings.telegram_bot_token:
+            return {"status": "skipped", "reason": "telegram_bot_token_not_configured"}
+        import httpx
+        url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
+        payload = {"chat_id": recipient_id, "text": message, "parse_mode": "HTML"}
+        try:
+            resp = httpx.post(url, json=payload, timeout=10)
+            return resp.json()
+        except Exception as exc:
+            logging.getLogger(__name__).warning("Telegram send failed: %s", exc)
+            return {"status": "error", "detail": str(exc)}
+    return {"status": "unsupported_channel"}
+
+
+def _fetch_vault_token_price(vault_address: str, chain_id: int) -> float | None:
+    """Fetch current token price from Chainlink price feed for a vault's active token."""
+    from libs.chain.price_feed import get_chainlink_price
+
+    w3 = _get_w3()
+    if w3 is None:
+        return None
+
+    # Get the vault's active token and its price feed
+    try:
+        from libs.chain.vault_reader import read_vault_price_feed
+        feed_addr = read_vault_price_feed(w3, vault_address)
+        if not feed_addr:
+            return None
+        result = get_chainlink_price(w3, feed_addr, stale_seconds=get_settings().stale_price_seconds)
+        if result and not result.stale:
+            return result.price_usd
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Price fetch failed for %s: %s", vault_address, exc)
+    return None
+
+
+@celery_app.task(name="worker.alerts.check", bind=True, max_retries=2)
+def check_price_alerts(self) -> dict:
+    """Check all active price alerts and trigger notifications/actions."""
+    from libs.db.models import PriceAlert
+
+    w3 = _get_w3()
+    settings = get_settings()
+
+    triggered_count = 0
+    errors = []
+
+    try:
+        with get_session_factory()() as db:
+            alerts = db.query(PriceAlert).filter(PriceAlert.is_active == True).all()
+
+            for alert in alerts:
+                try:
+                    price = _fetch_vault_token_price(alert.vault_address, alert.chain_id)
+                    if price is None:
+                        continue
+
+                    should_trigger = (
+                        (alert.alert_type == "below" and price <= alert.threshold_price) or
+                        (alert.alert_type == "above" and price >= alert.threshold_price)
+                    )
+                    if not should_trigger:
+                        continue
+
+                    # Execute action
+                    if alert.action_type == "none":
+                        msg = (
+                            f"🔔 <b>Price Alert!</b>\n"
+                            f"Vault: <code>{alert.vault_address}</code>\n"
+                            f"Type: {alert.alert_type.upper()} ${alert.threshold_price}\n"
+                            f"Current: ${price}"
+                        )
+                        notify_send(alert.recipient_id, alert.channel_type, msg)
+
+                    elif alert.action_type == "fast_swap":
+                        msg = (
+                            f"🚀 <b>Fast Swap Alert!</b>\n"
+                            f"Vault: <code>{alert.vault_address}</code>\n"
+                            f"Type: {alert.alert_type.upper()} ${alert.threshold_price}\n"
+                            f"Current: ${price}\n\n"
+                            f"Swap triggered manually — tap to execute."
+                        )
+                        notify_send(alert.recipient_id, alert.channel_type, msg)
+
+                    elif alert.action_type == "auto_swap":
+                        # Trigger auto swap
+                        enqueue_execution(alert.vault_address, "buy", f"auto_swap_alert_{alert.id}")
+                        msg = (
+                            f"⚡ <b>Auto-swap Triggered!</b>\n"
+                            f"Vault: <code>{alert.vault_address}</code>\n"
+                            f"Price: ${price}\n"
+                            f"Action: buy"
+                        )
+                        notify_send(alert.recipient_id, alert.channel_type, msg)
+
+                    # One-shot deactivate
+                    alert.is_active = False
+                    alert.triggered_at = datetime.now(timezone.utc)
+                    triggered_count += 1
+
+                except Exception as exc:
+                    errors.append({"alert_id": alert.id, "error": str(exc)})
+                    logging.getLogger(__name__).warning("Alert check failed for %s: %s", alert.id, exc)
+
+            db.commit()
+    except Exception as exc:
+        logging.getLogger(__name__).error("check_price_alerts failed: %s", exc)
+        raise self.retry(countdown=30, exc=exc)
+
+    return {"triggered": triggered_count, "checked": len(alerts), "errors": errors}
+
