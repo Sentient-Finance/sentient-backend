@@ -539,6 +539,7 @@ def notify_send(recipient_id: str, channel_type: str, message: str) -> dict:
         if not settings.telegram_bot_token:
             return {"status": "skipped", "reason": "telegram_bot_token_not_configured"}
         import httpx
+
         url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
         payload = {"chat_id": recipient_id, "text": message, "parse_mode": "HTML"}
         try:
@@ -561,14 +562,19 @@ def _fetch_vault_token_price(vault_address: str, chain_id: int) -> float | None:
     # Get the vault's active token and its price feed
     try:
         from libs.chain.vault_reader import read_vault_price_feed
+
         feed_addr = read_vault_price_feed(w3, vault_address)
         if not feed_addr:
             return None
-        result = get_chainlink_price(w3, feed_addr, stale_seconds=get_settings().stale_price_seconds)
+        result = get_chainlink_price(
+            w3, feed_addr, stale_seconds=get_settings().stale_price_seconds
+        )
         if result and not result.stale:
             return result.price_usd
     except Exception as exc:
-        logging.getLogger(__name__).warning("Price fetch failed for %s: %s", vault_address, exc)
+        logging.getLogger(__name__).warning(
+            "Price fetch failed for %s: %s", vault_address, exc
+        )
     return None
 
 
@@ -586,13 +592,16 @@ def check_price_alerts(self) -> dict:
 
             for alert in alerts:
                 try:
-                    price = _fetch_vault_token_price(alert.vault_address, alert.chain_id)
+                    price = _fetch_vault_token_price(
+                        alert.vault_address, alert.chain_id
+                    )
                     if price is None:
                         continue
 
                     should_trigger = (
-                        (alert.alert_type == "below" and price <= alert.threshold_price) or
-                        (alert.alert_type == "above" and price >= alert.threshold_price)
+                        alert.alert_type == "below" and price <= alert.threshold_price
+                    ) or (
+                        alert.alert_type == "above" and price >= alert.threshold_price
                     )
                     if not should_trigger:
                         continue
@@ -619,7 +628,9 @@ def check_price_alerts(self) -> dict:
 
                     elif alert.action_type == "auto_swap":
                         # Trigger auto swap
-                        enqueue_execution(alert.vault_address, "buy", f"auto_swap_alert_{alert.id}")
+                        enqueue_execution(
+                            alert.vault_address, "buy", f"auto_swap_alert_{alert.id}"
+                        )
                         msg = (
                             f"⚡ <b>Auto-swap Triggered!</b>\n"
                             f"Vault: <code>{alert.vault_address}</code>\n"
@@ -635,7 +646,9 @@ def check_price_alerts(self) -> dict:
 
                 except Exception as exc:
                     errors.append({"alert_id": alert.id, "error": str(exc)})
-                    logging.getLogger(__name__).warning("Alert check failed for %s: %s", alert.id, exc)
+                    logging.getLogger(__name__).warning(
+                        "Alert check failed for %s: %s", alert.id, exc
+                    )
 
             db.commit()
     except Exception as exc:
@@ -643,4 +656,3 @@ def check_price_alerts(self) -> dict:
         raise self.retry(countdown=30, exc=exc)
 
     return {"triggered": triggered_count, "checked": len(alerts), "errors": errors}
-

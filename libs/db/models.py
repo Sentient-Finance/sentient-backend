@@ -91,18 +91,22 @@ class ExecutionLog(Base):
 
 class UserNotificationChannel(Base):
     """Lưu notification channel của user (Telegram chat_id)."""
+
     __tablename__ = "notification_channels"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_wallet: Mapped[str] = mapped_column(String(64), index=True)  # owner wallet
     channel_type: Mapped[str] = mapped_column(String(16))  # "telegram"
-    channel_id: Mapped[str] = mapped_column(String(64))     # telegram chat_id string
+    channel_id: Mapped[str] = mapped_column(String(64))  # telegram chat_id string
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class PriceAlert(Base):
     """Alert threshold độc lập với on-chain TokenRule."""
+
     __tablename__ = "price_alerts"
     __table_args__ = (
         Index("ix_price_alerts_vault_active", "vault_address", "is_active"),
@@ -113,14 +117,14 @@ class PriceAlert(Base):
 
     # Notification target
     recipient_id: Mapped[str] = mapped_column(String(64), index=True)  # chat_id
-    channel_type: Mapped[str] = mapped_column(String(16))              # "telegram"
+    channel_type: Mapped[str] = mapped_column(String(16))  # "telegram"
 
     # Vault info
     vault_address: Mapped[str] = mapped_column(String(64), index=True)
     chain_id: Mapped[int] = mapped_column(Integer, default=84532)
 
     # Alert config
-    alert_type: Mapped[str] = mapped_column(String(16))    # "above" | "below"
+    alert_type: Mapped[str] = mapped_column(String(16))  # "above" | "below"
     threshold_price: Mapped[float] = mapped_column(Float)  # USD
 
     # Action (fast_swap / auto_swap)
@@ -128,5 +132,9 @@ class PriceAlert(Base):
     action_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    triggered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    triggered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

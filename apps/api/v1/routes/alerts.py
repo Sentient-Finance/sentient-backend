@@ -1,4 +1,5 @@
 """Price alert and notification channel management."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -18,6 +19,7 @@ settings = get_settings()
 
 
 # === Request/Response Models ===
+
 
 class ChannelRegisterRequest(BaseModel):
     user_wallet: str = Field(..., pattern=r"^0x[a-fA-F0-9]{40}$")
@@ -61,6 +63,7 @@ class PriceAlertResponse(BaseModel):
 
 
 # === Channel Routes ===
+
 
 @router.post("/channels", response_model=ChannelResponse)
 def register_channel(body: ChannelRegisterRequest, db: Session = Depends(get_db)):
@@ -124,6 +127,7 @@ def delete_channel(channel_id: int, db: Session = Depends(get_db)):
 
 
 # === Alert Routes ===
+
 
 @router.post("", response_model=PriceAlertResponse)
 def create_alert(body: PriceAlertCreateRequest, db: Session = Depends(get_db)):
