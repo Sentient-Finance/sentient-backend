@@ -552,22 +552,25 @@ def notify_send(recipient_id: str, channel_type: str, message: str) -> dict:
 
 
 def _fetch_vault_token_price(vault_address: str, chain_id: int) -> float | None:
-    """Fetch current token price from Chainlink price feed for a vault's active token."""
+    """Fetch current token price from Chainlink price feed for a vault's active token.
+
+    Uses the same pattern as _iter_active_rules: reads the vault's token rule
+    for WETH to get the price feed address, then fetches the USD price.
+    """
     from libs.chain.price_feed import get_chainlink_price
+    from libs.chain.vault_reader import read_vault_token_rule
 
     w3 = _get_w3()
     if w3 is None:
         return None
 
-    # Get the vault's active token and its price feed
     try:
-        from libs.chain.vault_reader import read_vault_price_feed
-
-        feed_addr = read_vault_price_feed(w3, vault_address)
-        if not feed_addr:
+        # Use WETH as the base token (same as _iter_active_rules)
+        rule = read_vault_token_rule(w3, vault_address, _WETH_BASE_SEPOLIA)
+        if rule is None or not rule.price_feed:
             return None
         result = get_chainlink_price(
-            w3, feed_addr, stale_seconds=get_settings().stale_price_seconds
+            w3, rule.price_feed, stale_seconds=get_settings().stale_price_seconds
         )
         if result and not result.stale:
             return result.price_usd
