@@ -538,7 +538,6 @@ def notify_send(recipient_id: str, channel_type: str, message: str) -> dict:
     if channel_type == "telegram":
         if not settings.telegram_bot_token:
             return {"status": "skipped", "reason": "telegram_bot_token_not_configured"}
-        import httpx
 
         url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
         payload = {"chat_id": recipient_id, "text": message, "parse_mode": "HTML"}
@@ -586,18 +585,39 @@ def check_price_alerts(self) -> dict:
     """Check all active price alerts and trigger notifications/actions."""
     from libs.db.models import PriceAlert
 
+    settings = get_settings()
+    redis_client = _get_redis()
+
+    tick_lock_key = "alerts:check:running"
+    if not redis_client.set(tick_lock_key, "1", ex=120, nx=True):
+        return {
+            "triggered": 0,
+            "checked": 0,
+            "errors": [],
+            "reason": "already_running",
+            "at": datetime.now(timezone.utc).isoformat(),
+        }
+
     triggered_count = 0
     errors = []
 
     try:
         with get_session_factory()() as db:
-            alerts = db.query(PriceAlert).filter(PriceAlert.is_active).all()
+            alerts = db.scalars(select(PriceAlert).where(PriceAlert.is_active)).all()
+
+            # Build price cache keyed by (vault_address, chain_id) to avoid
+            # redundant on-chain reads for the same vault across multiple alerts
+            price_cache: dict[tuple[str, int], float | None] = {}
+            for alert in alerts:
+                key = (alert.vault_address, alert.chain_id)
+                if key not in price_cache:
+                    price_cache[key] = _fetch_vault_token_price(
+                        alert.vault_address, alert.chain_id
+                    )
 
             for alert in alerts:
                 try:
-                    price = _fetch_vault_token_price(
-                        alert.vault_address, alert.chain_id
-                    )
+                    price = price_cache.get((alert.vault_address, alert.chain_id))
                     if price is None:
                         continue
 
@@ -609,6 +629,13 @@ def check_price_alerts(self) -> dict:
                     if not should_trigger:
                         continue
 
+                    # Idempotency: skip if already triggered while this task was running
+                    idem_key = f"alert:triggered:{alert.id}"
+                    if not redis_client.set(
+                        idem_key, "1", ex=settings.execution_cooldown_seconds, nx=True
+                    ):
+                        continue
+
                     # Execute action
                     if alert.action_type == "none":
                         msg = (
@@ -617,7 +644,7 @@ def check_price_alerts(self) -> dict:
                             f"Type: {alert.alert_type.upper()} ${alert.threshold_price}\n"
                             f"Current: ${price}"
                         )
-                        notify_send(alert.recipient_id, alert.channel_type, msg)
+                        notify_send.delay(alert.recipient_id, alert.channel_type, msg)
 
                     elif alert.action_type == "fast_swap":
                         msg = (
@@ -627,11 +654,10 @@ def check_price_alerts(self) -> dict:
                             f"Current: ${price}\n\n"
                             f"Swap triggered manually — tap to execute."
                         )
-                        notify_send(alert.recipient_id, alert.channel_type, msg)
+                        notify_send.delay(alert.recipient_id, alert.channel_type, msg)
 
                     elif alert.action_type == "auto_swap":
-                        # Trigger auto swap
-                        enqueue_execution(
+                        enqueue_execution.delay(
                             alert.vault_address, "buy", f"auto_swap_alert_{alert.id}"
                         )
                         msg = (
@@ -640,7 +666,7 @@ def check_price_alerts(self) -> dict:
                             f"Price: ${price}\n"
                             f"Action: buy"
                         )
-                        notify_send(alert.recipient_id, alert.channel_type, msg)
+                        notify_send.delay(alert.recipient_id, alert.channel_type, msg)
 
                     # One-shot deactivate
                     alert.is_active = False
@@ -657,5 +683,7 @@ def check_price_alerts(self) -> dict:
     except Exception as exc:
         logging.getLogger(__name__).error("check_price_alerts failed: %s", exc)
         raise self.retry(countdown=30, exc=exc)
+    finally:
+        redis_client.delete(tick_lock_key)
 
     return {"triggered": triggered_count, "checked": len(alerts), "errors": errors}

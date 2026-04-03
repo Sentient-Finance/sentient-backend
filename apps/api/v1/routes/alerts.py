@@ -10,12 +10,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
-from libs.core.config import get_settings
 from libs.db.models import PriceAlert, UserNotificationChannel
 from libs.db.session import get_db
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
-settings = get_settings()
 
 
 # === Request/Response Models ===
@@ -81,6 +79,7 @@ def register_channel(body: ChannelRegisterRequest, db: Session = Depends(get_db)
         existing.channel_id = body.channel_id
         existing.is_active = True
         db.commit()
+        db.refresh(existing)
         return existing
 
     channel = UserNotificationChannel(
@@ -89,6 +88,7 @@ def register_channel(body: ChannelRegisterRequest, db: Session = Depends(get_db)
         channel_id=body.channel_id,
     )
     db.add(channel)
+    db.flush()
     db.commit()
     db.refresh(channel)
     return channel
