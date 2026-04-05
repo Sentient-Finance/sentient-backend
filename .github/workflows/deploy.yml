@@ -22,4 +22,5 @@ jobs:
           script: |
             cd /home/moltbot/sentient-backend
             git pull origin main
+            make install
             pm2 restart all
