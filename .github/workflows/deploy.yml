@@ -21,6 +21,7 @@ jobs:
           port: ${{ secrets.VPS_PORT || '22' }}
           script: |
             cd /home/moltbot/sentient-backend
+            git fetch origin
             git pull origin main
             make install
-            pm2 restart all
+            pm2 start ecosystem.config.js
