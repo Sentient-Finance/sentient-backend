@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 import httpx
 from redis import Redis
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from web3 import Web3
 
 from apps.worker.celery_app import celery_app
@@ -21,7 +21,7 @@ from libs.chain.price_feed import get_chainlink_price
 from libs.chain.vault_reader import read_vault_token_rule
 from libs.core.config import get_settings
 from libs.core.strategy import StrategyRule, evaluate_rule
-from libs.db.models import ExecutionLog, Vault
+from libs.db.models import ExecutionLog, UserNotificationChannel, Vault
 from libs.db.session import get_session_factory
 
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -247,6 +247,80 @@ def notify_telegram(message: str) -> dict:
         return {"status": "sent", "response": body[:200]}
     except Exception as exc:
         return {"status": "failed", "reason": str(exc)}
+
+
+@celery_app.task(name="worker.notify.telegram_to_channel")
+def telegram_send_to_channel(channel_id: int, message: str) -> dict:
+    """Send a Telegram message to a specific registered channel (by DB id)."""
+    settings = get_settings()
+    if not settings.telegram_bot_token:
+        return {"status": "skipped", "reason": "TELEGRAM_BOT_TOKEN not configured"}
+
+    try:
+        with get_session_factory()() as db:
+            channel = db.get(UserNotificationChannel, channel_id)
+    except Exception as exc:
+        return {"status": "failed", "reason": f"DB error: {exc}"}
+
+    if not channel:
+        return {"status": "failed", "reason": f"Channel {channel_id} not found"}
+
+    if channel.channel_type != "telegram" or not channel.channel_id:
+        return {"status": "skipped", "reason": "Not a Telegram channel or not confirmed"}
+
+    if channel.status != "active":
+        return {"status": "skipped", "reason": f"Channel status is {channel.status}"}
+
+    url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
+    payload = urllib.parse.urlencode(
+        {
+            "chat_id": channel.channel_id,
+            "text": message,
+            "disable_web_page_preview": "true",
+        }
+    ).encode()
+    req = urllib.request.Request(url, data=payload, method="POST")
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
+
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            body = r.read().decode("utf-8", errors="ignore")
+        return {"status": "sent", "channel_id": channel_id, "response": body[:200]}
+    except Exception as exc:
+        return {"status": "failed", "channel_id": channel_id, "reason": str(exc)}
+
+
+@celery_app.task(name="worker.notify.telegram_to_wallet")
+def telegram_send_to_wallet(user_wallet: str, message: str) -> dict:
+    """Send a Telegram message to all active Telegram channels for a wallet."""
+    settings = get_settings()
+    if not settings.telegram_bot_token:
+        return {"status": "skipped", "reason": "TELEGRAM_BOT_TOKEN not configured"}
+
+    try:
+        with get_session_factory()() as db:
+            channels = db.scalars(
+                select(UserNotificationChannel).where(
+                    and_(
+                        UserNotificationChannel.user_wallet == user_wallet.lower(),
+                        UserNotificationChannel.channel_type == "telegram",
+                        UserNotificationChannel.channel_id.isnot(None),
+                        UserNotificationChannel.status == "active",
+                    )
+                )
+            ).all()
+    except Exception as exc:
+        return {"status": "failed", "reason": f"DB error: {exc}"}
+
+    if not channels:
+        return {"status": "skipped", "reason": "No active Telegram channels for wallet"}
+
+    results = []
+    for channel in channels:
+        result = telegram_send_to_channel.delay(channel.id, message)
+        results.append({"channel_id": channel.id, "task_id": result.id})
+
+    return {"status": "dispatched", "channels": results}
 
 
 @celery_app.task(name="worker.strategy.tick")

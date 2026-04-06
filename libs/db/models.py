@@ -64,6 +64,26 @@ class VaultEvent(Base):
     )
 
 
+class UserNotificationChannel(Base):
+    """Stores user notification channel preferences (Telegram, email, etc.)."""
+
+    __tablename__ = "user_notification_channels"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_wallet: Mapped[str] = mapped_column(String(64), index=True)
+    channel_type: Mapped[str] = mapped_column(String(32))  # "telegram" | "email" | "discord"
+    channel_id: Mapped[str | None] = mapped_column(String(128), nullable=True)  # chat_id for Telegram, email address, etc.
+    connect_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
+    token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="pending")  # "pending" | "active" | "failed"
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class ExecutionLog(Base):
     """Audit trail for every on-chain execution attempt."""
 

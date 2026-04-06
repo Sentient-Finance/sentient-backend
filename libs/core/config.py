@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     )
 
     telegram_bot_token: str | None = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
+    telegram_bot_username: str | None = Field(default=None, alias="TELEGRAM_BOT_USERNAME")
     telegram_chat_id: str | None = Field(default=None, alias="TELEGRAM_CHAT_ID")
 
     max_notional_per_trade: float = Field(
