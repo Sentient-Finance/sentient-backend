@@ -24,7 +24,7 @@ services:
       uvicorn apps.api.app.main:app --host 0.0.0.0 --port 8000
     networks:
       - default
-      - ${DOCKER_PROXY_NETWORK}
+      - sentient-proxy
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.sentient-api.rule=Host(`${DOMAIN}`)"
@@ -83,3 +83,7 @@ services:
         condition: service_healthy
       worker:
         condition: service_started
+
+networks:
+  sentient-proxy:
+    external: true

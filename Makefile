@@ -152,7 +152,7 @@ test:
 
 # --- Production (Docker) ---
 setup-proxy:
-	@docker network inspect $(DOCKER_PROXY_NETWORK) >/dev/null 2>&1 || docker network create $(DOCKER_PROXY_NETWORK)
+	@docker network inspect sentient-proxy >/dev/null 2>&1 || docker network create sentient-proxy
 	@mkdir -p infra/letsencrypt
 	@touch infra/letsencrypt/acme.json
 	@chmod 600 infra/letsencrypt/acme.json
