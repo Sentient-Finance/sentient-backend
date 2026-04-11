@@ -227,3 +227,6 @@ Thumbs.db
 .vscode/
 .idea/
 CLAUDE.md
+
+# Infrastructure
+infra/letsencrypt/
