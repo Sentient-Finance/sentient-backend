@@ -1,0 +1,35 @@
+http:
+  routers:
+    sentient-api:
+      rule: "Host(`sentient-finance.duckdns.org`)"
+      service: sentient-api
+      entryPoints:
+        - websecure
+      tls:
+        certresolver: myresolver
+
+    portainer:
+      rule: "Host(`admin.sentient-finance.duckdns.org`)"
+      service: portainer
+      entryPoints:
+        - websecure
+      tls:
+        certresolver: myresolver
+      middlewares:
+        - portainer-auth
+
+  services:
+    sentient-api:
+      loadBalancer:
+        servers:
+          - url: "http://sentient-backend-api-1:8000"
+
+    portainer:
+      loadBalancer:
+        servers:
+          - url: "http://portainer:9000"
+
+  middlewares:
+    portainer-auth:
+      basicAuth:
+        usersFile: /letsencrypt/htpasswd

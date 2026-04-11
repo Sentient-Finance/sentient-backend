@@ -136,8 +136,6 @@ services:
     restart: unless-stopped
     command:
       - "--api.insecure=false"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
       - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
@@ -145,17 +143,15 @@ services:
       - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL}"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
       # Redirect HTTP to HTTPS
-      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
-      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
-    environment:
-      - "DOCKER_API_VERSION=1.54"
+      - "--providers.file.filename=/etc/traefik/dynamic.yml"
+      - "--providers.file.watch=true"
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - "./letsencrypt/acme.json:/letsencrypt/acme.json"
-      - "./letsencrypt/htpasswd:/letsencrypt/htpasswd:ro"
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./infra/letsencrypt/acme.json:/letsencrypt/acme.json"
+      - "./infra/letsencrypt/htpasswd:/letsencrypt/htpasswd:ro"
+      - "./infra/traefik-dynamic.yml:/etc/traefik/dynamic.yml:ro"
     networks:
       - sentient-proxy
 
