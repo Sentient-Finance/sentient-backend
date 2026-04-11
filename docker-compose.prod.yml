@@ -22,8 +22,15 @@ services:
     command: >
       python -m alembic upgrade head &&
       uvicorn apps.api.app.main:app --host 0.0.0.0 --port 8000
-    ports:
-      - "127.0.0.1:8000:8000"
+    networks:
+      - default
+      - ${DOCKER_PROXY_NETWORK}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sentient-api.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.sentient-api.entrypoints=websecure"
+      - "traefik.http.routers.sentient-api.tls.certresolver=myresolver"
+      - "traefik.http.services.sentient-api.loadbalancer.server.port=8000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -34,6 +41,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+networks:
+  ${DOCKER_PROXY_NETWORK}:
+    external: true
 
   worker:
     <<: *backend-common

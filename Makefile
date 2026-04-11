@@ -149,7 +149,18 @@ test:
 
 
 # --- Production (Docker) ---
-prod-up:
+setup-proxy:
+	@docker network inspect $(DOCKER_PROXY_NETWORK) >/dev/null 2>&1 || docker network create $(DOCKER_PROXY_NETWORK)
+	@mkdir -p infra/letsencrypt
+	@touch infra/letsencrypt/acme.json
+	@chmod 600 infra/letsencrypt/acme.json
+	@if [ ! -f infra/letsencrypt/htpasswd ]; then \
+		echo "admin:$$(openssl passwd -apr1 $(PORTTAINER_PASSWORD))" > infra/letsencrypt/htpasswd; \
+		chmod 600 infra/letsencrypt/htpasswd; \
+		echo "Created htpasswd for Portainer auth"; \
+	fi
+
+prod-up: setup-proxy
 	$(PROD_COMPOSE) up -d --build
 
 prod-down:

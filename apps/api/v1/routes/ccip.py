@@ -17,18 +17,6 @@ from libs.core.config import Settings, get_settings
 router = APIRouter(prefix="/vaults/ccip", tags=["ccip"])
 settings = get_settings()
 
-CCIP_ROUTERS: dict[int, str] = {
-    84532: "0xD3b06cEbF099CE7DA4AcCf578aaebFDBd6e88a93",
-    11155111: "0x0BF3dE8c5D3e8A2B34D2BEeB17ABfCeBaf363A59",
-}
-
-CCIP_CHAIN_SELECTORS: dict[str, int] = {
-    "ethereum_sepolia": 16015286601757825753,
-    "arbitrum_sepolia": 3478487238524512106,
-    "op_sepolia": 5224473277236331295,
-    "bnb_chain_testnet": 13264668187771770619,
-}
-
 _GET_FEE_ABI = [
     {
         "inputs": [
@@ -111,9 +99,9 @@ class EstimateFeeResponse(BaseModel):
 
 
 def _get_rpc_url(chain_id: int, settings: Settings) -> str:
-    if chain_id == 84532:
+    if chain_id == settings.chain_base_sepolia_id:
         return settings.base_rpc_url or "https://sepolia.base.org"
-    if chain_id == 11155111:
+    if chain_id == settings.chain_eth_sepolia_id:
         return settings.eth_rpc_url or "https://rpc.sepolia.org"
     raise HTTPException(status_code=400, detail=f"Unsupported chain_id: {chain_id}")
 
@@ -132,36 +120,76 @@ def _build_ccip_message(body: EstimateFeeRequest) -> tuple:  # type: ignore[type
     return (receiver_bytes, b"", token_amounts, fee_token, extra_args)
 
 
-# Built once at import time — data is static, no need to reconstruct per request
-_CCIP_CONFIG = CCIPConfigResponse(
-    chains=[
-        CCIPChainConfig(
-            chain_id=84532, chain_name="Base Sepolia", ccip_router=CCIP_ROUTERS[84532]
-        ),
-        CCIPChainConfig(
-            chain_id=11155111,
-            chain_name="Ethereum Sepolia",
-            ccip_router=CCIP_ROUTERS[11155111],
-        ),
-    ],
-    destinations=[
-        CCIPDestinationConfig(
-            chain_name="Ethereum Sepolia",
-            selector=CCIP_CHAIN_SELECTORS["ethereum_sepolia"],
-        ),
-        CCIPDestinationConfig(
-            chain_name="Arbitrum Sepolia",
-            selector=CCIP_CHAIN_SELECTORS["arbitrum_sepolia"],
-        ),
-        CCIPDestinationConfig(
-            chain_name="OP Sepolia", selector=CCIP_CHAIN_SELECTORS["op_sepolia"]
-        ),
-        CCIPDestinationConfig(
-            chain_name="BNB Chain Testnet",
-            selector=CCIP_CHAIN_SELECTORS["bnb_chain_testnet"],
-        ),
-    ],
-)
+class ConfigError(Exception):
+    """Raised when required chain configuration is missing."""
+
+    pass
+
+
+def _build_ccip_config() -> CCIPConfigResponse:
+    """Build CCIP config, validating required keys exist."""
+    missing: list[str] = []
+    for chain_id, name in [
+        (settings.chain_base_sepolia_id, "Base Sepolia"),
+        (settings.chain_eth_sepolia_id, "Ethereum Sepolia"),
+    ]:
+        if chain_id not in settings.ccip_routers:
+            missing.append(f"ccip_routers missing key {chain_id} ({name})")
+    for name in [
+        "ethereum_sepolia",
+        "arbitrum_sepolia",
+        "op_sepolia",
+        "bnb_chain_testnet",
+    ]:
+        if name not in settings.ccip_chain_selectors:
+            missing.append(f"ccip_chain_selectors missing key '{name}'")
+    if missing:
+        raise ConfigError(
+            f"CCIP config invalid — missing keys: {'; '.join(missing)}. "
+            "Check CHAIN_BASE_SEPOLIA_ID, CHAIN_ETH_SEPOLIA_ID, CCIP_ROUTERS, CCIP_CHAIN_SELECTORS env vars."
+        )
+    return CCIPConfigResponse(
+        chains=[
+            CCIPChainConfig(
+                chain_id=settings.chain_base_sepolia_id,
+                chain_name="Base Sepolia",
+                ccip_router=settings.ccip_routers[settings.chain_base_sepolia_id],
+            ),
+            CCIPChainConfig(
+                chain_id=settings.chain_eth_sepolia_id,
+                chain_name="Ethereum Sepolia",
+                ccip_router=settings.ccip_routers[settings.chain_eth_sepolia_id],
+            ),
+        ],
+        destinations=[
+            CCIPDestinationConfig(
+                chain_name="Ethereum Sepolia",
+                selector=settings.ccip_chain_selectors["ethereum_sepolia"],
+            ),
+            CCIPDestinationConfig(
+                chain_name="Arbitrum Sepolia",
+                selector=settings.ccip_chain_selectors["arbitrum_sepolia"],
+            ),
+            CCIPDestinationConfig(
+                chain_name="OP Sepolia",
+                selector=settings.ccip_chain_selectors["op_sepolia"],
+            ),
+            CCIPDestinationConfig(
+                chain_name="BNB Chain Testnet",
+                selector=settings.ccip_chain_selectors["bnb_chain_testnet"],
+            ),
+        ],
+    )
+
+
+try:
+    _CCIP_CONFIG = _build_ccip_config()
+except ConfigError as e:
+    # Fail fast at import time with a clear message rather than a cryptic KeyError
+    import logging
+
+    logging.getLogger(__name__).critical(str(e))
+    raise
 
 
 @router.get("/config", response_model=CCIPConfigResponse)
@@ -179,7 +207,7 @@ def estimate_ccip_fee(
     rpc_url = _get_rpc_url(body.chain_id, settings)
     w3 = _get_w3_for_chain(rpc_url)
 
-    ccip_router = CCIP_ROUTERS.get(body.chain_id)
+    ccip_router = settings.ccip_routers.get(body.chain_id)
     if not ccip_router:
         raise HTTPException(
             status_code=400, detail=f"No CCIP router for chain_id {body.chain_id}"
