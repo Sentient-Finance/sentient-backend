@@ -113,7 +113,7 @@ services:
   portainer:
     image: portainer/portainer-ce:latest
     networks:
-      - ${DOCKER_PROXY_NETWORK}
+      - sentient-proxy
       - default
     labels:
       - "traefik.enable=true"
@@ -155,7 +155,7 @@ services:
       - "./letsencrypt/acme.json:/letsencrypt/acme.json"
       - "./letsencrypt/htpasswd:/letsencrypt/htpasswd:ro"
     networks:
-      - ${DOCKER_PROXY_NETWORK}
+      - sentient-proxy
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/health"]
       interval: 30s
@@ -163,7 +163,7 @@ services:
       retries: 3
 
 networks:
-  ${DOCKER_PROXY_NETWORK}:
+  sentient-proxy:
     external: true
 
 volumes:
