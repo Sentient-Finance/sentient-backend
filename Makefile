@@ -7,6 +7,8 @@ VENV_DIR ?= .venv
 PORT     ?= 8001
 MSG      ?=
 REV      ?= -1
+DOCKER_PROXY_NETWORK ?= sentient-proxy
+PORTTAINER_PASSWORD   ?= admin
 
 # Detect python executable
 ifneq ($(wildcard $(VENV_DIR)/Scripts/python.exe),)
