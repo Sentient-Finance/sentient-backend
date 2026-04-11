@@ -42,10 +42,6 @@ services:
       redis:
         condition: service_healthy
 
-networks:
-  ${DOCKER_PROXY_NETWORK}:
-    external: true
-
   worker:
     <<: *backend-common
     command: python -m celery -A apps.worker.celery_app worker --pool=prefork -l info -Q celery

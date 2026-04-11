@@ -32,7 +32,7 @@ endif
 
 # Docker Compose commands
 INFRA_COMPOSE := docker compose --project-directory . -f infra/docker-compose.yml
-PROD_COMPOSE  := docker compose --project-directory . -f infra/docker-compose.yml -f docker-compose.prod.yml
+PROD_COMPOSE  := docker compose --env-file .env --project-directory . -f infra/docker-compose.yml -f docker-compose.prod.yml
 
 # --- Help ---
 help:
