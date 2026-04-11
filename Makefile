@@ -2,6 +2,8 @@
 
 SHELL := bash
 
+-include .env
+
 # --- Variables ---
 VENV_DIR ?= .venv
 PORT     ?= 8001
