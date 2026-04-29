@@ -64,16 +64,12 @@ jobs:
             # Login to GitHub Container Registry
             echo $GHCR_PAT | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-            cd /home/moltbot/server/sentient-backend
+            cd /home/moltbot/sentient-backend
             git fetch origin
             git pull origin main
 
-            # Pull the latest built images
-            docker compose -f docker-compose.prod.yml pull
-
-            # Restart containers
-            docker compose -f docker-compose.prod.yml down --remove-orphans || true
-            docker compose -f docker-compose.prod.yml up -d
+            # Use Makefile to deploy (Single Source of Truth)
+            make prod-up
 
             # Clean up old images
             docker image prune -af

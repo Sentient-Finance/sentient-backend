@@ -1,54 +1,55 @@
-## Sentient Backend
+# Sentient Backend
 
-Backend monorepo for Sentient Finance — hybrid architecture:
-- **The Graph** for read / event-history queries
-- **FastAPI + Celery worker** for write / action + CRE execution
+> Backend monorepo for Sentient Finance — hybrid architecture combining The Graph for reads, FastAPI + Celery for writes and CRE execution, and Chainlink for cross-chain infrastructure.
 
-## Chainlink Integration
-
-The backend supports Chainlink **CCIP** (config, fee estimation) and **Feed Registry** configuration.
-
-### Files Using Chainlink
-
-| File | Purpose |
-|------|---------|
-| [`libs/core/config.py`](libs/core/config.py) | `chainlink_feed_registry_address` config |
-| [`apps/api/v1/routes/ccip.py`](apps/api/v1/routes/ccip.py) | CCIP config endpoint, fee estimation |
-
-## Repository layout
+## Architecture
 
 ```
-apps/
-  api/          FastAPI public + internal API
-  indexer/      On-chain event indexer (poll loop)
-  worker/       Celery strategy + execution workers
-libs/
-  core/         Settings, shared utilities
-  chain/        Web3 / contract clients
-  db/           SQLAlchemy models, session factory
-infra/
-  docker-compose.yml   Local Postgres 16 + Redis 7
-alembic/        Database migrations
-scripts/        Bootstrap + dev helpers
+┌─────────────┐     ┌─────────────┐     ┌─────────────────┐
+│  The Graph  │────▶│   FastAPI    │────▶│  Celery Workers │
+│  (subgraph) │     │  (REST/WSP)  │     │ (strategy/tasks)│
+└─────────────┘     └──────────────┘     └────────┬────────┘
+                                                  │
+                         ┌────────────────────────┼────────────────────────┐
+                         │                        │                        │
+               ┌─────────▼─────────┐   ┌─────────▼─────────┐   ┌─────────▼─────────┐
+               │   PostgreSQL 16   │   │      Redis 7       │   │   Chainlink CCIP   │
+               │   (persistent)    │   │  (broker/cache)    │   │  (cross-chain txs) │
+               └───────────────────┘   └───────────────────┘   └───────────────────┘
 ```
 
-## Quickstart — 3 steps
+## Tech Stack
 
-### Git Bash / Linux / macOS
+| Layer               | Technology                                               |
+| ------------------- | -------------------------------------------------------- |
+| **Read layer**      | The Graph (subgraph) for event-history queries           |
+| **Write layer**     | FastAPI + Celery workers                                 |
+| **Blockchain**      | Web3.py, Chainlink CCIP + Feed Registry                  |
+| **Database**        | PostgreSQL 16, SQLAlchemy 2 (async), Alembic migrations  |
+| **Cache/Broker**    | Redis 7                                                  |
+| **Monitoring**      | Prometheus, Loki, Grafana                                |
+| **Infrastructure**  | Docker, Docker Compose                                   |
+
+---
+
+## Quickstart
+
+### Prerequisites
+
+- Python 3.12+ · Docker 24+ · Docker Compose 2.20+ · Make
+
+### Linux / macOS
 
 ```bash
 # 1. Bootstrap (copies .env, starts docker, installs venv)
 cp .env.example .env && ./scripts/bootstrap.sh
 
 # 2. Activate venv
-source .venv/Scripts/activate   # Windows Git Bash
-# source .venv/bin/activate     # Linux / macOS
+source .venv/bin/activate
 
 # 3. Start API
-uvicorn apps.api.app.main:app --reload
+make api   # or: uvicorn apps.api.app.main:app --reload
 ```
-
-Then open: <http://localhost:8000/api/v1/health>
 
 ### Windows (PowerShell)
 
@@ -60,60 +61,89 @@ Copy-Item .env.example .env -ErrorAction SilentlyContinue; .\scripts\bootstrap.p
 .\.venv\Scripts\Activate.ps1
 
 # 3. Start API
-uvicorn apps.api.app.main:app --reload
+make api
 ```
 
-### Makefile shorthand (requires `make`)
+Then open: <http://localhost:8000/api/v1/health>
+
+---
+
+## Makefile Commands
 
 ```bash
-make db-up    # step 1 — start infra only
-make install  # install deps into venv
-make dev      # step 3 — uvicorn with reload
+# Setup
+make venv            # Create virtual environment
+make install         # Install app + dev dependencies + pre-commit hooks
+make db-up           # Start Postgres 16 + Redis 7
+
+# Run services
+make api             # FastAPI dev server (uvicorn with reload)
+make dev             # uvicorn with reload
+make worker          # Celery worker (queue: celery)
+make worker-execution # Execution worker (queue: execution, concurrency=1)
+make beat            # Celery beat scheduler
+make run-all         # All services via honcho (includes db-up)
+make indexer         # On-chain event indexer
+
+# Database migrations (run after db-up)
+make migrate         # Apply all pending migrations
+make revision MSG="description"  # Create new migration
+make downgrade       # Roll back one step
+
+# Quality
+make lint            # ruff check
+make fix             # ruff check --fix
+make format          # black format
+make type-check      # mypy type check
+make test            # pytest (or: pytest tests/path/to/test.py -v)
+
+# Production
+make prod-up         # Build and start full stack (Docker)
+make prod-down       # Stop production stack
+make prod-logs       # Tail production logs
+make db-down         # Stop Postgres/Redis (keeps volumes)
 ```
 
 Run `make help` to see all targets.
 
-## Local runbook
+---
 
-### Infrastructure
+## Repository Layout
 
-```bash
-# Start Postgres 16 + Redis 7
-docker compose -f infra/docker-compose.yml up -d
-
-# Stop (keeps volumes)
-docker compose -f infra/docker-compose.yml down
-
-# Destroy including data
-docker compose -f infra/docker-compose.yml down -v
+```text
+apps/
+  api/           FastAPI application (apps/api/app/main.py:app)
+    v1/routes/   Route modules: vaults.py, ccip.py, main.py
+    limiter.py   Rate limiting via slowapi
+  worker/        Celery application
+    celery_app.py  Celery instance + beat schedule
+    tasks.py      Task definitions: strategy, execution, risk_guard, indexer
+  indexer/       On-chain event indexer (apps/indexer/main.py)
+libs/
+  core/config.py  pydantic-settings (Settings singleton via get_settings())
+  chain/         Web3 / contract clients: vault_reader, executor, price_feed
+  db/            SQLAlchemy: models.py, session.py, base.py
+alembic/         Database migrations (alembic upgrade head)
+infra/           docker-compose.yml (Postgres 16, Redis 7, Prometheus, Loki, Grafana)
+scripts/         Bootstrap helpers
 ```
 
-Wait ~5 s for Postgres to become healthy before running migrations.
+---
 
-### Database migrations
+## Services
 
-```bash
-# Apply all pending migrations
-make migrate           # or: python -m alembic upgrade head
+| Service | Command | Description |
+| ------- | ------- | ----------- |
+| API | `make api` | FastAPI dev server (uvicorn with reload) |
+| Worker | `make worker` | Celery worker (queue: celery) |
+| Execution worker | `make worker-execution` | Single-concurrency execution queue |
+| Beat scheduler | `make beat` | Celery beat (runs periodic tasks) |
+| Indexer | `make indexer` | On-chain event indexer |
+| All services | `make run-all` | Via honcho + Procfile |
 
-# Create a new migration (autogenerate from models)
-make revision MSG="add users table"
+---
 
-# Roll back one step
-make downgrade
-```
-
-### Running services
-
-| Service | Command |
-|---------|---------|
-| API | `uvicorn apps.api.app.main:app --reload` |
-| Worker | `celery -A apps.worker.celery_app worker -l info` |
-| Indexer | `python -m apps.indexer.main` |
-
-Or via Makefile: `make dev`, `make worker`, `make indexer`.
-
-### API endpoints
+## API Endpoints
 
 All routes are prefixed with `/api/v1`.
 
@@ -124,8 +154,10 @@ All routes are prefixed with `/api/v1`.
 | `GET /api/v1/vaults` | Vault list (pagination + chain filter) |
 | `GET /api/v1/vault/{address}` | Vault detail |
 | `GET /api/v1/vault/{address}/history` | Vault event history (type/from/to filters) |
+| `GET /api/v1/ccip/config` | CCIP configuration |
+| `POST /api/v1/ccip/estimate-fees` | Fee estimation |
 
-#### API behavior notes
+### API Behavior Notes
 
 - `GET /api/v1/vault/{address}`
   - `404` when vault is not found
@@ -134,26 +166,67 @@ All routes are prefixed with `/api/v1`.
   - `404` when vault is not found
   - `422` when invalid date range (`from > to`) or invalid params are provided
 
-### Tests
+---
 
-```bash
-make test         # or: pytest
-```
+## Chainlink Integration
 
-### Lint / format
+| File | Purpose |
+| ---- | ------- |
+| `libs/core/config.py` | `chainlink_feed_registry_address` config |
+| `apps/api/v1/routes/ccip.py` | CCIP config endpoint, fee estimation |
+| `libs/chain/price_feed.py` | Price feed reads via `eth_call` |
 
-```bash
-make lint         # ruff check
-make fix          # ruff check --fix
-make format       # black .
-```
+---
 
-## Environment variables
+## Strategy Engine
+
+Celery beat runs `worker.strategy.tick` every `STRATEGY_TICK_SECONDS` (default `60`).
+
+For each vault, the strategy worker evaluates latest DB events:
+
+- `TokenRuleSet` payload: `buy_threshold`, `sell_threshold`, `cooldown_seconds`, `last_executed_at`
+- `PriceObserved` payload: `price`
+
+If threshold + cooldown checks pass, it enqueues `worker.execution.enqueue` with Redis idempotency lock:
+
+- key format: `strategy:{vault}:{action}:{YYYYMMDDHHMM}`
+- lock TTL: 90 seconds
+
+### Celery Beat Schedule
+
+| Task | Interval | Env var |
+| ---- | -------- | ------- |
+| `strategy-tick` | 60s default | `STRATEGY_TICK_SECONDS` |
+| `risk-guard-tick` | 60s default | `RISK_TICK_SECONDS` |
+| `indexer-tick` | 10s default | `INDEXER_TICK_SECONDS` |
+
+---
+
+## Risk Guard
+
+`worker.risk_guard.tick` enforces:
+
+- `max_notional_per_trade`
+- `max_daily_notional`
+- `max_open_positions`
+
+---
+
+## Rate Limiting
+
+Slowapi-based, applied per-IP:
+
+- `RATE_LIMIT_PUBLIC` — 60/min default
+- `RATE_LIMIT_HEAVY` — 20/min
+
+---
+
+## Environment Variables
 
 Copy `.env.example` to `.env` and adjust as needed.
 
 | Variable | Default | Description |
-|----------|---------|-------------|
+| -------- | ------- | ----------- |
 | `APP_ENV` | `dev` | Environment name |
 | `APP_PORT` | `8000` | API port |
 | `POSTGRES_HOST` | `127.0.0.1` | Postgres host |
@@ -162,18 +235,69 @@ Copy `.env.example` to `.env` and adjust as needed.
 | `ETH_RPC_URL` | — | Ethereum JSON-RPC endpoint |
 | `DATABASE_URL` | — | Full DSN override (optional) |
 | `CHAINLINK_FEED_REGISTRY_ADDRESS` | — | Chainlink Feed Registry (optional) |
+| `EXECUTOR_PRIVATE_KEY` | — | Executor wallet private key |
+| `EXECUTOR_DRY_RUN` | `false` | If true, simulates via `eth_call` only |
+| `BASE_TOKEN_ADDRESS` | — | USDC on Base Sepolia by default |
+| `SUBGRAPH_URL` | — | The Graph subgraph URL |
+| `SUBGRAPH_API_KEY` | — | The Graph API key |
+| `SUBGRAPH_ID` | — | The Graph subgraph ID |
+| `CHAIN_BASE_SEPOLIA_ID` | `84532` | Chain ID for subgraph network filtering |
 
-## Strategy engine tick (Issue #5)
+---
 
-Celery beat runs `worker.strategy.tick` every `STRATEGY_TICK_SECONDS` (default `60`).
+## Database Management
 
-For each vault, the strategy worker evaluates latest DB events:
-- `TokenRuleSet` payload: `buy_threshold`, `sell_threshold`, `cooldown_seconds`, `last_executed_at`
-- `PriceObserved` payload: `price`
+```bash
+# Connect to database
+psql -d sentient
 
-If threshold + cooldown checks pass, it enqueues `worker.execution.enqueue` with Redis idempotency lock:
-- key format: `strategy:{vault}:{action}:{YYYYMMDDHHMM}`
-- lock TTL: 90 seconds
+# List tables
+sentient=# \dt
+
+# Check active connections
+sentient=# SELECT numbackends, datname, usename, state FROM pg_stat_activity;
+
+# Check database size
+sentient=# SELECT pg_size_pretty(pg_database_size('sentient'));
+```
+
+---
+
+## Troubleshooting
+
+| Symptom | Fix |
+| ------- | ---|
+| Postgres not reachable | Ensure `make db-up` ran successfully; check `docker compose -f infra/docker-compose.yml ps` |
+| Migration fails | Wait ~5s for Postgres to become healthy after `db-up` |
+| Redis connection error | Verify `REDIS_URL` in `.env` is correct |
+| Strategy tick not running | Check Celery beat is active (`make beat`) and workers are connected |
+
+---
+
+## Quality
+
+```bash
+make lint         # ruff check
+make fix          # ruff check --fix
+make format       # black format
+make type-check   # mypy type check
+make test         # pytest (or: pytest tests/path/to/test.py -v)
+```
+
+Single test: `pytest tests/path/to/test.py -v`
+
+---
+
+## Production
+
+```bash
+make prod-up       # Build and start full stack (Docker)
+make prod-down     # Stop production stack
+make prod-logs     # Tail production logs
+make db-down       # Stop Postgres/Redis (keeps volumes)
+```
+
+---
 
 ## CI
 
