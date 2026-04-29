@@ -151,18 +151,7 @@ test:
 
 
 # --- Production (Docker) ---
-setup-proxy:
-	@docker network inspect sentient-proxy >/dev/null 2>&1 || docker network create sentient-proxy
-	@mkdir -p infra/letsencrypt
-	@touch infra/letsencrypt/acme.json
-	@chmod 600 infra/letsencrypt/acme.json
-	@if [ ! -f infra/letsencrypt/htpasswd ]; then \
-		echo "admin:$$(openssl passwd -apr1 $(PORTTAINER_PASSWORD))" > infra/letsencrypt/htpasswd; \
-		chmod 600 infra/letsencrypt/htpasswd; \
-		echo "Created htpasswd for Portainer auth"; \
-	fi
-
-prod-up: setup-proxy
+prod-up:
 	$(PROD_COMPOSE) up -d --build
 
 prod-down:
