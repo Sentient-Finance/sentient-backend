@@ -246,6 +246,8 @@ async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle any unrecognized command."""
+    if update.message is None:
+        return
     await update.message.reply_text(
         "🤔 I don't understand that command.\n\n" "Try /start to get started.",
     )
