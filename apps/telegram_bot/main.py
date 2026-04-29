@@ -116,7 +116,7 @@ def _confirm_channel(connect_token: str, chat_id: str) -> dict | None:
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start — with or without a connect token."""
-    if not update.effective_user or not update.effective_chat:
+    if not update.effective_user or not update.effective_chat or not update.message:
         return
 
     chat_id = str(update.effective_chat.id)
@@ -178,7 +178,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def alert_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a test alert to this chat (admins only)."""
-    if not update.effective_user or not update.effective_chat:
+    if not update.effective_user or not update.effective_chat or not update.message:
         return
 
     user_id = str(update.effective_user.id)
@@ -203,7 +203,7 @@ async def alert_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Delete the user's Telegram notification channel via the API."""
-    if not update.effective_user or not update.effective_chat:
+    if not update.effective_user or not update.effective_chat or not update.message:
         return
 
     chat_id = str(update.effective_chat.id)
@@ -251,7 +251,7 @@ async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     )
 
 
-async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.warning("Telegram error: %s %s", context.error, update)
 
 
