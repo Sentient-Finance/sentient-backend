@@ -1,4 +1,5 @@
 x-backend-common: &backend-common
+  image: ghcr.io/sentient-finance/sentient-backend:latest
   build: .
   env_file: .env
   restart: unless-stopped
@@ -18,6 +19,7 @@ x-backend-common: &backend-common
 
 services:
   api:
+    container_name: sentient-api
     <<: *backend-common
     command: >
       python -m alembic upgrade head &&
@@ -34,8 +36,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - sentient-internal
+      - npm_network
 
   worker:
+    container_name: sentient-worker
     <<: *backend-common
     command: python -m celery -A apps.worker.celery_app worker --pool=prefork -l info -Q celery
     healthcheck:
@@ -48,8 +54,11 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+    networks:
+      - sentient-internal
 
   worker-exec:
+    container_name: sentient-worker-exec
     <<: *backend-common
     command: python -m celery -A apps.worker.celery_app worker --pool=prefork -l info -Q execution --concurrency=1
     deploy:
@@ -67,8 +76,11 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+    networks:
+      - sentient-internal
 
   beat:
+    container_name: sentient-beat
     <<: *backend-common
     command: python -m celery -A apps.worker.celery_app beat -l info
     depends_on:
@@ -76,3 +88,11 @@ services:
         condition: service_healthy
       worker:
         condition: service_started
+    networks:
+      - sentient-internal
+
+networks:
+  sentient-internal:
+    driver: bridge
+  npm_network:
+    external: true

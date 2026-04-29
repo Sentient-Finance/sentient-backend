@@ -1,5 +1,6 @@
 services:
   postgres:
+    container_name: sentient-postgres
     image: postgres:16
     restart: unless-stopped
     environment:
@@ -21,6 +22,7 @@ services:
           memory: 512M
 
   redis:
+    container_name: sentient-redis
     image: redis:7
     restart: unless-stopped
     ports:
@@ -38,6 +40,7 @@ services:
           memory: 256M
 
   prometheus:
+    container_name: sentient-prometheus
     image: prom/prometheus:latest
     restart: unless-stopped
     volumes:
@@ -56,6 +59,7 @@ services:
           memory: 512M
 
   grafana:
+    container_name: sentient-grafana
     image: grafana/grafana:latest
     restart: unless-stopped
     ports:
@@ -72,6 +76,7 @@ services:
           memory: 256M
 
   loki:
+    container_name: sentient-loki
     image: grafana/loki:latest
     restart: unless-stopped
     ports:
@@ -86,6 +91,7 @@ services:
           memory: 256M
 
   promtail:
+    container_name: sentient-promtail
     image: grafana/promtail:latest
     restart: unless-stopped
     volumes:
@@ -98,6 +104,7 @@ services:
       - loki
 
   cadvisor:
+    container_name: sentient-cadvisor
     image: gcr.io/cadvisor/cadvisor:latest
     restart: unless-stopped
     volumes:
@@ -111,6 +118,7 @@ services:
     privileged: true
 
   portainer:
+    container_name: sentient-portainer
     image: portainer/portainer-ce:latest
     ports:
       - "127.0.0.1:9000:9000"
@@ -126,3 +134,8 @@ volumes:
   prometheus_data:
   grafana_data:
   loki_data:
+
+networks:
+  default:
+    name: sentient-internal
+    external: false

@@ -9,7 +9,7 @@ Create Date: 2026-04-06
 from typing import Sequence, Union
 
 import sqlalchemy as sa
-from alembic import op
+from alembic import op  # type: ignore[attr-defined]
 
 # revision identifiers, used by Alembic.
 revision: str = "20260406_0001"
@@ -44,17 +44,6 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.text("now()"),
         ),
-    )
-    op.create_index(
-        "ix_user_notification_channels_user_wallet",
-        "user_notification_channels",
-        ["user_wallet"],
-    )
-    op.create_index(
-        "ix_user_notification_channels_connect_token",
-        "user_notification_channels",
-        ["connect_token"],
-        unique=True,
     )
 
 

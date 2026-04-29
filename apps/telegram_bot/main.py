@@ -15,12 +15,6 @@ Required env vars:
     ALERTS_API_URL          — base URL of the alerts API (e.g. http://localhost:8000)
     TELEGRAM_ADMIN_IDS      — comma-separated list of Telegram user IDs that can use /alert
                                (optional; leave empty to disable admin commands)
-
-Optional:
-    TELEGRAM_WEBHOOK_SECRET  — if set, verifies X-Telegram-Bot-Api-Secret-Token header
-    TELEGRAM_WEBHOOK_MODE    — if "true", run in webhook mode instead of polling
-    TELEGRAM_WEBHOOK_HOST   — public host for webhook (e.g. https://yourhost.com)
-    TELEGRAM_WEBHOOK_PATH    — webhook path (default /telegram/webhook)
 """
 
 from __future__ import annotations
@@ -32,22 +26,23 @@ import urllib.request
 from typing import Any
 
 # Ensure libs/ is on the path (needed when running as module)
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.insert(
+    0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
 
 try:
-    import telegram
-    import telegram.ext
     from telegram import Update
     from telegram.constants import ParseMode
     from telegram.ext import (
-        Application,
         CommandHandler,
         ContextTypes,
         MessageHandler,
         filters,
     )
 except ImportError:
-    sys.stderr.write("Error: python-telegram-bot is not installed. Run: pip install python-telegram-bot\n")
+    sys.stderr.write(
+        "Error: python-telegram-bot is not installed. Run: pip install python-telegram-bot\n"
+    )
     sys.exit(1)
 
 logging.basicConfig(
@@ -80,11 +75,15 @@ if not TELEGRAM_BOT_TOKEN:
 # API helpers
 # ---------------------------------------------------------------------------
 
-def _api_call(method: str, path: str, data: dict[str, Any] | None = None) -> dict | None:
+
+def _api_call(
+    method: str, path: str, data: dict[str, Any] | None = None
+) -> dict | None:
     """Call the alerts API. Returns JSON dict or None on error."""
     url = f"{ALERTS_API_URL}{path}"
     try:
         import json
+
         body = json.dumps(data).encode("utf-8") if data else None
         req = urllib.request.Request(
             url,
@@ -100,22 +99,26 @@ def _api_call(method: str, path: str, data: dict[str, Any] | None = None) -> dic
 
 
 def _confirm_channel(connect_token: str, chat_id: str) -> dict | None:
-    return _api_call("POST", "/api/v1/alerts/channels/confirm", {
-        "connect_token": connect_token,
-        "chat_id": chat_id,
-    })
+    return _api_call(
+        "POST",
+        "/api/v1/alerts/channels/confirm",
+        {
+            "connect_token": connect_token,
+            "chat_id": chat_id,
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
 # Handlers
 # ---------------------------------------------------------------------------
 
+
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start — with or without a connect token."""
     if not update.effective_user or not update.effective_chat:
         return
 
-    user = update.effective_user
     chat_id = str(update.effective_chat.id)
 
     if context.args:
@@ -181,7 +184,9 @@ async def alert_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     user_id = str(update.effective_user.id)
 
     if ADMIN_IDS and user_id not in ADMIN_IDS:
-        await update.message.reply_text("⛔ You are not authorized to use this command.")
+        await update.message.reply_text(
+            "⛔ You are not authorized to use this command."
+        )
         return
 
     if context.args:
@@ -203,25 +208,46 @@ async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     chat_id = str(update.effective_chat.id)
 
-    # Try to find and delete the channel via the API
-    result = _api_call(
-        "DELETE",
-        f"/api/v1/alerts/channels?chat_id={chat_id}",
+    # Find the channel by chat_id first, then delete by internal channel_id
+    channel = _api_call(
+        "GET",
+        f"/api/v1/alerts/channels/by-chat_id?chat_id={chat_id}",
     )
 
-    # Note: the current API uses channel ID, not chat_id query param.
-    # For now, confirm via a friendly message.
-    await update.message.reply_text(
-        "👋 You've been disconnected from Sentient Finance alerts.\n\n"
-        "To re-connect, use the deep link from the Sentient Finance app.",
+    if not channel:
+        await update.message.reply_text(
+            "❌ No connected channel found for this chat.\n\n"
+            "If you've already disconnected, you can ignore this message.",
+        )
+        return
+
+    channel_id = channel.get("id")
+    if not channel_id:
+        await update.message.reply_text(
+            "❌ Could not determine your channel ID. Please try again later.",
+        )
+        return
+
+    result = _api_call(
+        "DELETE",
+        f"/api/v1/alerts/channels/{channel_id}",
     )
+
+    if result is None:
+        await update.message.reply_text(
+            "❌ Failed to disconnect. Please try again later.",
+        )
+    else:
+        await update.message.reply_text(
+            "👋 You've been disconnected from Sentient Finance alerts.\n\n"
+            "To re-connect, use the deep link from the Sentient Finance app.",
+        )
 
 
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle any unrecognized command."""
     await update.message.reply_text(
-        "🤔 I don't understand that command.\n\n"
-        "Try /start to get started.",
+        "🤔 I don't understand that command.\n\n" "Try /start to get started.",
     )
 
 
@@ -230,61 +256,15 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 # ---------------------------------------------------------------------------
-# Webhook mode (optional)
-# ---------------------------------------------------------------------------
-
-async def webhook_handler(request: telegram.Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle an incoming update from the webhook."""
-    await update_queue.put(request)
-
-
-def run_webhook_mode() -> None:
-    """Run the bot in webhook mode using the built-in tornado server."""
-    from telegram.ext import ApplicationBuilder
-
-    webhook_host = os.environ.get("TELEGRAM_WEBHOOK_HOST", "").rstrip("/")
-    webhook_path = os.environ.get("TELEGRAM_WEBHOOK_PATH", "/telegram/webhook")
-    webhook_secret = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
-    telegram_secret_token = os.environ.get("TELEGRAM_BOT_API_SECRET_TOKEN", "")
-
-    if not webhook_host:
-        logger.error("TELEGRAM_WEBHOOK_HOST must be set for webhook mode")
-        sys.exit(1)
-
-    app = (
-        ApplicationBuilder()
-        .token(TELEGRAM_BOT_TOKEN)
-        .webhook_url(f"{webhook_host}{webhook_path}")
-        .build()
-    )
-
-    app.add_handler(CommandHandler("start", start_command))
-    app.add_handler(CommandHandler("alert", alert_command))
-    app.add_handler(CommandHandler("stop", stop_command))
-    app.add_handler(MessageHandler(filters.COMMAND, unknown_command))
-    app.add_error_handler(error_handler)
-
-    app.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.environ.get("PORT", 8080)),
-        url_path=webhook_path,
-        secret_token=telegram_secret_token or None,
-    )
-
-
-# ---------------------------------------------------------------------------
 # Polling mode (default for development)
 # ---------------------------------------------------------------------------
+
 
 def run_polling_mode() -> None:
     """Run the bot using long polling (development mode)."""
     import telegram.ext
 
-    app = (
-        telegram.ext.ApplicationBuilder()
-        .token(TELEGRAM_BOT_TOKEN)
-        .build()
-    )
+    app = telegram.ext.ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("alert", alert_command))
@@ -301,8 +281,4 @@ def run_polling_mode() -> None:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    if os.environ.get("TELEGRAM_WEBHOOK_MODE", "").lower() in ("1", "true", "yes"):
-        logger.info("Running in webhook mode")
-        run_webhook_mode()
-    else:
-        run_polling_mode()
+    run_polling_mode()

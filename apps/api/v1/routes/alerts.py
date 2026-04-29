@@ -1,20 +1,12 @@
 """
-Alert notification channel management.
+Alert notification management.
 
-POST /alerts/channels  — register / initiate a notification channel
-GET  /alerts/channels  — list channels for a wallet
+Channel management:
+  POST /alerts/channels  — register / initiate a notification channel
+  GET  /alerts/channels  — list channels for a wallet
 
-Channel types:
-  - telegram  — requires a connect-token flow; returns a deep link to open the bot
-
-Connect-token flow for Telegram:
-  1. FE calls POST /alerts/channels with user_wallet + channel_type="telegram"
-  2. Backend creates a pending channel with a short-lived connect_token
-  3. Backend returns a Telegram deep link: https://t.me/<BOT_USERNAME>?start=<token>
-  4. User clicks link → bot receives /start <token>
-  5. Bot validates token, calls PATCH /alerts/channels/{channel_id} with chat_id
-     OR calls POST /alerts/channels/confirm with the token + chat_id
-  6. Channel status moves to "active"
+History management:
+  GET  /alerts/history   — list notification history for a wallet
 """
 
 from __future__ import annotations
@@ -25,15 +17,16 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, select
+from sqlalchemy import and_, desc, func, select
 from sqlalchemy.orm import Session
 
 from apps.api.limiter import limiter
+from apps.worker.tasks import telegram_send_to_channel
 from libs.core.config import get_settings
-from libs.db.models import UserNotificationChannel
+from libs.db.models import NotificationLog, UserNotificationChannel
 from libs.db.session import get_db
 
-router = APIRouter(prefix="/alerts/channels", tags=["alerts"])
+router = APIRouter(prefix="/alerts", tags=["alerts"])
 
 settings = get_settings()
 
@@ -93,6 +86,22 @@ class ChannelListResponse(BaseModel):
     items: list[ChannelItem]
 
 
+class NotificationLogItem(BaseModel):
+    id: int
+    user_wallet: str
+    channel_type: str
+    channel_id: str | None
+    message: str
+    status: str
+    error: str | None
+    sent_at: datetime
+
+
+class NotificationHistoryResponse(BaseModel):
+    items: list[NotificationLogItem]
+    total: int
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -112,12 +121,12 @@ def _get_bot_username() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Routes
+# Channel Routes
 # ---------------------------------------------------------------------------
 
 
 @router.post(
-    "",
+    "/channels",
     response_model=ChannelCreateResponse,
     responses={
         422: {"description": "Validation error"},
@@ -223,12 +232,13 @@ def create_channel(
 
 
 @router.post(
-    "/confirm",
+    "/channels/confirm",
     response_model=ChannelConfirmResponse,
     responses={
         404: {"description": "Token not found or expired"},
     },
 )
+@limiter.limit(settings.rate_limit_public)
 def confirm_channel(
     payload: ChannelConfirmRequest,
     db: Session = Depends(get_db),
@@ -257,18 +267,22 @@ def confirm_channel(
     if channel.token_expires_at and channel.token_expires_at < now:
         raise HTTPException(status_code=410, detail="Token has expired")
 
+    # Idempotent — if already active, clear token and return ok
     if channel.status == "active":
-        # Idempotent — already confirmed
+        channel.connect_token = None
+        channel.token_expires_at = None
+        db.commit()
         return ChannelConfirmResponse(
             ok=True,
             channel_id=channel.id,
             status=channel.status,
         )
 
+    # Activate the channel
+    channel.connect_token = None
+    channel.token_expires_at = None
     channel.channel_id = payload.chat_id
     channel.status = "active"
-    channel.connect_token = None  # one-time use
-    channel.token_expires_at = None
     db.commit()
 
     return ChannelConfirmResponse(
@@ -279,7 +293,7 @@ def confirm_channel(
 
 
 @router.get(
-    "",
+    "/channels",
     response_model=ChannelListResponse,
 )
 def list_channels(
@@ -312,7 +326,7 @@ def list_channels(
 
 
 @router.delete(
-    "/{channel_id:int}",
+    "/channels/{channel_id:int}",
     responses={
         204: {"description": "Channel deleted"},
         404: {"description": "Channel not found"},
@@ -329,3 +343,136 @@ def delete_channel(
     db.delete(channel)
     db.commit()
     return None
+
+
+@router.post(
+    "/channels/{channel_id:int}/test",
+    responses={
+        202: {"description": "Test notification dispatched"},
+        403: {"description": "Channel does not belong to the specified wallet"},
+        404: {"description": "Channel not found"},
+    },
+)
+def test_channel_notification(
+    channel_id: int,
+    user_wallet: Annotated[
+        str, Query(description="Wallet address to verify ownership")
+    ],
+    db: Session = Depends(get_db),
+):
+    """Dispatch a test Telegram notification for a specific channel."""
+    channel = db.get(UserNotificationChannel, channel_id)
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    if channel.user_wallet.strip().lower() != user_wallet.strip().lower():
+        raise HTTPException(
+            status_code=403, detail="Channel does not belong to this wallet"
+        )
+
+    if channel.channel_type != "telegram" or not channel.channel_id:
+        raise HTTPException(
+            status_code=422,
+            detail="Test notifications are only supported for confirmed Telegram channels",
+        )
+
+    # Dispatch celery task
+    message = (
+        "🧪 <b>Sentient Finance Test</b>\n\n"
+        "Your notification channel is working correctly!\n"
+        f"Wallet: <code>{channel.user_wallet}</code>\n"
+        f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    )
+    telegram_send_to_channel.delay(channel_id, message)
+
+    return {"status": "ok", "detail": "Test notification dispatched"}
+
+
+@router.get(
+    "/channels/by-chat_id",
+    response_model=ChannelItem,
+    responses={
+        404: {"description": "Channel not found"},
+    },
+)
+def get_channel_by_chat_id(
+    chat_id: Annotated[str, Query(description="Telegram chat_id to look up")],
+    db: Session = Depends(get_db),
+):
+    """Look up a notification channel by Telegram chat_id."""
+    channel = db.scalar(
+        select(UserNotificationChannel).where(
+            and_(
+                UserNotificationChannel.channel_type == "telegram",
+                UserNotificationChannel.channel_id == chat_id,
+                UserNotificationChannel.status == "active",
+            )
+        )
+    )
+    if not channel:
+        raise HTTPException(
+            status_code=404, detail="No active Telegram channel found for this chat"
+        )
+    return ChannelItem(
+        id=channel.id,
+        user_wallet=channel.user_wallet,
+        channel_type=channel.channel_type,
+        channel_id=channel.channel_id,
+        status=channel.status,
+        created_at=channel.created_at,
+    )
+
+
+# ---------------------------------------------------------------------------
+# History Routes
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/history",
+    response_model=NotificationHistoryResponse,
+)
+def list_notification_history(
+    user_wallet: Annotated[str, Query(description="Wallet address")],
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+):
+    """List notification history for a wallet (from DB)."""
+    wallet = user_wallet.strip().lower()
+
+    # Total count
+    total = (
+        db.scalar(
+            select(func.count(NotificationLog.id)).where(
+                NotificationLog.user_wallet == wallet
+            )
+        )
+        or 0
+    )
+
+    # Page items
+    rows = db.scalars(
+        select(NotificationLog)
+        .where(NotificationLog.user_wallet == wallet)
+        .order_by(desc(NotificationLog.sent_at))
+        .limit(limit)
+        .offset(offset)
+    ).all()
+
+    return NotificationHistoryResponse(
+        total=total,
+        items=[
+            NotificationLogItem(
+                id=row.id,
+                user_wallet=row.user_wallet,
+                channel_type=row.channel_type,
+                channel_id=row.channel_id,
+                message=row.message,
+                status=row.status,
+                error=row.error,
+                sent_at=row.sent_at,
+            )
+            for row in rows
+        ],
+    )
