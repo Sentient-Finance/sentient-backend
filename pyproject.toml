@@ -21,6 +21,7 @@ dependencies = [
   "celery>=5.5.0",
   "web3>=7.13.0",
   "slowapi>=0.1.9",
+  "python-telegram-bot>=21.0",
 ]
 
 [project.optional-dependencies]

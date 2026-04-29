@@ -3,6 +3,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from apps.api.v1.routes.alerts import router as alerts_router
 from apps.api.v1.routes.ccip import router as ccip_router
 from apps.api.v1.routes.vaults import router as vaults_router
 from libs.db.session import get_db
@@ -20,4 +21,5 @@ def ready(db: Session = Depends(get_db)):
 
 
 router.include_router(vaults_router)
+router.include_router(alerts_router)
 router.include_router(ccip_router)
