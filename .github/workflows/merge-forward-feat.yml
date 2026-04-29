@@ -35,11 +35,11 @@ jobs:
           FAILED=""
           SUCCEEDED=""
 
-          # List all remote feat branches
-          mapfile -t FEAT_BRANCHES < <(git branch -r --list 'origin/feat/*' | sed 's|origin/||' | tr -d ' ')
+          # List all feat branches with open PRs targeting main
+          mapfile -t FEAT_BRANCHES < <(gh pr list --base main --state OPEN --json headRefName --jq '.[].headRefName' | grep '^feat/' | sort -u)
 
           if [ -z "$FEAT_BRANCHES" ]; then
-            echo "No feat branches found."
+            echo "No feat branches with open PRs found."
             exit 0
           fi
 
