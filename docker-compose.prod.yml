@@ -112,6 +112,7 @@ services:
       resources:
         limits:
           memory: 512M
+          cpus: '0.75'
 
   redis:
     container_name: sentient-redis
@@ -130,6 +131,7 @@ services:
       resources:
         limits:
           memory: 256M
+          cpus: '0.25'
 
 networks:
   sentient-internal:

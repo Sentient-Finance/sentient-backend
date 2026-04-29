@@ -68,12 +68,8 @@ jobs:
             git fetch origin
             git pull origin main
 
-            # Pull the latest built images (using both compose files)
-            docker compose -f infra/docker-compose.yml -f docker-compose.prod.yml pull
-
-            # Restart containers
-            docker compose -f infra/docker-compose.yml -f docker-compose.prod.yml down --remove-orphans || true
-            docker compose -f infra/docker-compose.yml -f docker-compose.prod.yml up -d
+            # Use Makefile to deploy (Single Source of Truth)
+            make prod-up
 
             # Clean up old images
             docker image prune -af
