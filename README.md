@@ -271,36 +271,3 @@ sentient=# SELECT pg_size_pretty(pg_database_size('sentient'));
 | Migration fails | Wait ~5s for Postgres to become healthy after `db-up` |
 | Redis connection error | Verify `REDIS_URL` in `.env` is correct |
 | Strategy tick not running | Check Celery beat is active (`make beat`) and workers are connected |
-
----
-
-## Quality
-
-```bash
-make lint         # ruff check
-make fix          # ruff check --fix
-make format       # black format
-make type-check   # mypy type check
-make test         # pytest (or: pytest tests/path/to/test.py -v)
-```
-
-Single test: `pytest tests/path/to/test.py -v`
-
----
-
-## Production
-
-```bash
-make prod-up       # Build and start full stack (Docker)
-make prod-down     # Stop production stack
-make prod-logs     # Tail production logs
-make db-down       # Stop Postgres/Redis (keeps volumes)
-```
-
----
-
-## CI
-
-Workflow: `.github/workflows/openclaw-bridge.yml`
-
-Required secrets: `OPENCLAW_HOOK_URL`, `OPENCLAW_HOOK_TOKEN`
