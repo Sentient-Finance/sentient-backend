@@ -120,22 +120,56 @@ services:
   portainer:
     container_name: sentient-portainer
     image: portainer/portainer-ce:latest
-    ports:
-      - "127.0.0.1:9000:9000"
+    networks:
+      - sentient-proxy
+      - default
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.portainer.rule=Host(`admin.${DOMAIN}`)"
+      - "traefik.http.routers.portainer.entrypoints=websecure"
+      - "traefik.http.routers.portainer.tls.certresolver=myresolver"
+      - "traefik.http.routers.portainer.middlewares=portainer-auth"
+      - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+      - "traefik.http.middlewares.portainer-auth.basicauth.usersfile=/letsencrypt/htpasswd"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - portainer_data:/data
     restart: unless-stopped
+    # Portainer accessible only via Traefik with Basic Auth — do NOT expose directly
+    # Note: /var/run/docker.sock mount removed — Portainer can use host Docker API
+    # via the host network mode or a separate docker socket if truly needed.
+    # Exposing the socket publicly via Traefik is a container-escape risk.
 
-volumes:
-  pgdata:
-  portainer_data:
-  redisdata:
-  prometheus_data:
-  grafana_data:
-  loki_data:
+  traefik:
+    image: traefik:v3.0
+    restart: unless-stopped
+    command:
+      - "--api.insecure=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+      # Redirect HTTP to HTTPS
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+    environment:
+      - "DOCKER_API_VERSION=1.54"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "./letsencrypt/acme.json:/letsencrypt/acme.json"
+      - "./letsencrypt/htpasswd:/letsencrypt/htpasswd:ro"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    networks:
+      - sentient-proxy
 
 networks:
+  sentient-proxy:
+    external: true
   default:
     name: sentient-internal
     external: false

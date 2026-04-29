@@ -36,7 +36,9 @@ class Settings(BaseSettings):
     )
 
     telegram_bot_token: str | None = Field(default=None, alias="TELEGRAM_BOT_TOKEN")
-    telegram_bot_username: str | None = Field(default=None, alias="TELEGRAM_BOT_USERNAME")
+    telegram_bot_username: str | None = Field(
+        default=None, alias="TELEGRAM_BOT_USERNAME"
+    )
     telegram_chat_id: str | None = Field(default=None, alias="TELEGRAM_CHAT_ID")
 
     max_notional_per_trade: float = Field(
@@ -87,6 +89,27 @@ class Settings(BaseSettings):
         default=84532,
         alias="CHAIN_BASE_SEPOLIA_ID",
         description="Chain ID for Base Sepolia (subgraph network)",
+    )
+    chain_eth_sepolia_id: int = Field(
+        default=11155111,
+        alias="CHAIN_ETH_SEPOLIA_ID",
+    )
+
+    ccip_routers: dict[int, str] = Field(
+        default={
+            84532: "0xD3b06cEbF099CE7DA4AcCf578aaebFDBd6e88a93",
+            11155111: "0x0BF3dE8c5D3e8A2B34D2BEeB17ABfCeBaf363A59",
+        },
+        alias="CCIP_ROUTERS",
+    )
+    ccip_chain_selectors: dict[str, int] = Field(
+        default={
+            "ethereum_sepolia": 16015286601757825753,
+            "arbitrum_sepolia": 3478487238524512106,
+            "op_sepolia": 5224473277236331295,
+            "bnb_chain_testnet": 13264668187771770619,
+        },
+        alias="CCIP_CHAIN_SELECTORS",
     )
 
     strategy_tick_seconds: int = Field(

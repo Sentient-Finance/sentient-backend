@@ -2,6 +2,8 @@
 
 SHELL := bash
 
+-include .env
+
 # --- Variables ---
 VENV_DIR ?= .venv
 PORT     ?= 8001
@@ -30,7 +32,7 @@ endif
 
 # Docker Compose commands
 INFRA_COMPOSE := docker compose --project-directory . -f infra/docker-compose.yml
-PROD_COMPOSE  := docker compose --project-directory . -f infra/docker-compose.yml -f docker-compose.prod.yml
+PROD_COMPOSE  := docker compose --env-file .env --project-directory . -f infra/docker-compose.yml -f docker-compose.prod.yml
 
 # --- Help ---
 help:
@@ -149,7 +151,18 @@ test:
 
 
 # --- Production (Docker) ---
-prod-up:
+setup-proxy:
+	@docker network inspect sentient-proxy >/dev/null 2>&1 || docker network create sentient-proxy
+	@mkdir -p infra/letsencrypt
+	@touch infra/letsencrypt/acme.json
+	@chmod 600 infra/letsencrypt/acme.json
+	@if [ ! -f infra/letsencrypt/htpasswd ]; then \
+		echo "admin:$$(openssl passwd -apr1 $(PORTTAINER_PASSWORD))" > infra/letsencrypt/htpasswd; \
+		chmod 600 infra/letsencrypt/htpasswd; \
+		echo "Created htpasswd for Portainer auth"; \
+	fi
+
+prod-up: setup-proxy
 	$(PROD_COMPOSE) up -d --build
 
 prod-down:
