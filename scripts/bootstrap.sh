@@ -7,7 +7,7 @@ if [[ ! -f .env ]]; then
   cp .env.example .env
 fi
 
-docker compose -f infra/docker-compose.yml up -d
+docker compose -f docker-compose.yml up -d
 
 if [[ ! -d .venv ]]; then
   if command -v python3 >/dev/null 2>&1; then
@@ -34,4 +34,3 @@ echo "Next:"
 echo "  source .venv/Scripts/activate  # Windows Git Bash"
 echo "  source .venv/bin/activate      # Linux/macOS"
 echo "  ./scripts/dev.sh"
-

@@ -29,7 +29,7 @@ Bootstrap sẽ tự động:
 ## 2. Khởi động infrastructure
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d
+docker compose -f docker-compose.yml up -d
 ```
 
 | Service  | Port |
@@ -115,16 +115,16 @@ Chạy tất cả 5 service bằng 1 lệnh duy nhất:
 
 ```bash
 # Build image và khởi động tất cả service
-docker compose -f infra/docker-compose.yml -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 
 # Xem logs (tất cả service)
-docker compose -f infra/docker-compose.yml -f docker-compose.prod.yml logs -f
+docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f
 
 # Xem logs 1 service cụ thể
-docker compose -f infra/docker-compose.yml -f docker-compose.prod.yml logs -f api
+docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f api
 
 # Dừng tất cả
-docker compose -f infra/docker-compose.yml -f docker-compose.prod.yml down
+docker compose -f docker-compose.yml -f docker-compose.prod.yml down
 ```
 
 | Service | Mô tả |

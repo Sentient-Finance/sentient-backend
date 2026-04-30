@@ -78,14 +78,13 @@ make db-up           # Start Postgres 16 + Redis 7
 
 # Run services
 make api             # FastAPI dev server (uvicorn with reload)
-make dev             # uvicorn with reload
 make worker          # Celery worker (queue: celery)
 make worker-execution # Execution worker (queue: execution, concurrency=1)
 make beat            # Celery beat scheduler
 make run-all         # All services via honcho (includes db-up)
 make indexer         # On-chain event indexer
 
-# Database migrations (run after db-up)
+# Database migrations (run after dev-up)
 make migrate         # Apply all pending migrations
 make revision MSG="description"  # Create new migration
 make downgrade       # Roll back one step
@@ -97,11 +96,15 @@ make format          # black format
 make type-check      # mypy type check
 make test            # pytest (or: pytest tests/path/to/test.py -v)
 
+# Docker
+make dev-up           # Start dev stack (postgres, redis, api, workers, monitoring)
+make dev-down         # Stop dev stack
+make dev-logs         # Tail dev logs
+
 # Production
-make prod-up         # Build and start full stack (Docker)
-make prod-down       # Stop production stack
-make prod-logs       # Tail production logs
-make db-down         # Stop Postgres/Redis (keeps volumes)
+make prod-up          # Build and start full stack (Docker)
+make prod-down        # Stop production stack
+make prod-logs        # Tail production logs
 ```
 
 Run `make help` to see all targets.
@@ -124,7 +127,7 @@ libs/
   chain/         Web3 / contract clients: vault_reader, executor, price_feed
   db/            SQLAlchemy: models.py, session.py, base.py
 alembic/         Database migrations (alembic upgrade head)
-infra/           docker-compose.yml (Postgres 16, Redis 7, Prometheus, Loki, Grafana)
+infra/           docker-compose.yml (Postgres 16, Redis 7, Prometheus, Loki, Grafana, monitoring)
 scripts/         Bootstrap helpers
 ```
 
@@ -267,7 +270,7 @@ sentient=# SELECT pg_size_pretty(pg_database_size('sentient'));
 
 | Symptom | Fix |
 | ------- | ---|
-| Postgres not reachable | Ensure `make db-up` ran successfully; check `docker compose -f infra/docker-compose.yml ps` |
+| Postgres not reachable | Ensure `make dev-up` ran; check `docker compose ps` |
 | Migration fails | Wait ~5s for Postgres to become healthy after `db-up` |
 | Redis connection error | Verify `REDIS_URL` in `.env` is correct |
 | Strategy tick not running | Check Celery beat is active (`make beat`) and workers are connected |

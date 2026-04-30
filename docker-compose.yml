@@ -10,7 +10,7 @@ services:
     ports:
       - "127.0.0.1:5435:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - dev-pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -30,7 +30,7 @@ services:
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
-      - redisdata:/data
+      - dev-redisdata:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -236,8 +236,8 @@ networks:
     driver: bridge
 
 volumes:
-  pgdata:
-  redisdata:
+  dev-pgdata:
+  dev-redisdata:
   prometheus_data:
   grafana_data:
   loki_data:

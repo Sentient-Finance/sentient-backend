@@ -13,7 +13,7 @@ if (-not (Test-Path ".env")) {
 }
 
 Write-Step "Start local infra (Postgres/Redis)"
-docker compose -f "infra/docker-compose.yml" up -d
+docker compose -f "docker-compose.yml" up -d
 
 Write-Step "Create venv"
 if (-not (Test-Path ".venv")) {
@@ -28,4 +28,3 @@ Write-Step "Done"
 Write-Host "Next:"
 Write-Host "  .\.venv\Scripts\activate"
 Write-Host "  .\scripts\dev.ps1"
-
