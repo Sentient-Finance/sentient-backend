@@ -48,6 +48,12 @@ make prod-up       # Build and start full stack (Docker)
 make prod-down     # Stop production stack
 make prod-logs     # Tail production logs
 make db-down       # Stop Postgres/Redis (keeps volumes)
+
+# Development (Docker)
+make dev-up        # Start local dev stack (postgres, redis, monitoring)
+make dev-down      # Stop local dev stack
+make dev-logs      # Tail local dev logs
+make dev-full      # Full dev stack (infra + honcho services)
 ```
 
 Single test: `pytest tests/path/to/test.py -v`

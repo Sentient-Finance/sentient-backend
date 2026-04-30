@@ -1,4 +1,4 @@
-.PHONY: help venv install install-prod api lint fix format type-check test db-up db-down migrate revision downgrade indexer worker worker-execution beat run-all setup-hooks prod-up prod-down prod-logs
+.PHONY: help venv install install-prod api lint fix format type-check test migrate revision downgrade worker worker-execution beat run-all setup-hooks prod-up prod-down prod-logs dev-up dev-down dev-logs
 
 SHELL := bash
 
@@ -6,7 +6,7 @@ SHELL := bash
 
 # --- Variables ---
 VENV_DIR ?= .venv
-PORT     ?= 8001
+PORT     ?= 8000
 MSG      ?=
 REV      ?= -1
 
@@ -31,8 +31,8 @@ else
 endif
 
 # Docker Compose commands
-INFRA_COMPOSE := docker compose --project-directory . -f infra/docker-compose.yml
-PROD_COMPOSE  := docker compose --env-file .env --project-directory . -f infra/docker-compose.yml -f docker-compose.prod.yml
+DEV_COMPOSE  := docker compose --env-file .env --project-directory . -f docker-compose.yml
+PROD_COMPOSE := docker compose --env-file .env --project-directory . -f docker-compose.yml -f docker-compose.prod.yml
 
 # --- Help ---
 help:
@@ -52,7 +52,7 @@ help:
 	"" \
 	"Local Execution:" \
 	"  api                Run FastAPI (PORT=$(PORT))" \
-	"  run-all            Run all services (API+Workers+Beat) via honcho (includes db-up)" \
+	"  run-all            Run all services (API+Workers+Beat) via honcho" \
 	"  indexer            Run indexer (one-shot, -v for verbose)" \
 	"" \
 	"Quality & Testing:" \
@@ -63,16 +63,19 @@ help:
 	"  test               Pytest" \
 	"" \
 	"Database & Migrations:" \
-	"  db-up              Start Postgres/Redis (docker compose)" \
-	"  db-down            Stop Postgres/Redis" \
 	"  migrate            Alembic upgrade head" \
 	"  revision MSG=      Create Alembic revision" \
 	"  downgrade REV=     Alembic downgrade (default -1)" \
 	"" \
 	"Production (Docker):" \
-	"  prod-up            Build and start full stack in production mode" \
+	"  prod-up            Build and start full stack (API + workers on npm_network)" \
 	"  prod-down          Stop production stack" \
-	"  prod-logs          Tail production logs"
+	"  prod-logs          Tail production logs" \
+	"" \
+	"Development (Docker):" \
+	"  dev-up             Start all dev containers (postgres, redis, api, workers, monitoring)" \
+	"  dev-down           Stop dev stack" \
+	"  dev-logs           Tail dev logs"
 
 # --- Project Setup ---
 venv:
@@ -90,12 +93,6 @@ setup-hooks:
 	$(PY) -m pre_commit install
 
 # --- Database & Migrations ---
-db-up:
-	$(INFRA_COMPOSE) up -d
-
-db-down:
-	$(INFRA_COMPOSE) down
-
 migrate:
 	$(PY) -m alembic upgrade head
 
@@ -120,7 +117,7 @@ beat:
 api:
 	$(PY) -m uvicorn apps.api.app.main:app --reload --reload-dir apps --reload-dir libs --port "$(PORT)"
 
-run-all: db-up
+run-all:
 	@if ! command -v $(HONCHO) >/dev/null 2>&1; then \
 		echo "Error: '$(HONCHO)' not found. Install it with: $(PIP) install honcho"; \
 		exit 1; \
@@ -149,7 +146,6 @@ type-check:
 test:
 	$(PY) -m pytest
 
-
 # --- Production (Docker) ---
 prod-up:
 	$(PROD_COMPOSE) up -d --build
@@ -159,3 +155,13 @@ prod-down:
 
 prod-logs:
 	$(PROD_COMPOSE) logs -f
+
+# --- Development (Docker) ---
+dev-up:
+	$(DEV_COMPOSE) up -d
+
+dev-down:
+	$(DEV_COMPOSE) down
+
+dev-logs:
+	$(DEV_COMPOSE) logs -f

@@ -15,7 +15,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, desc, func, select
 from sqlalchemy.orm import Session
@@ -134,6 +134,7 @@ def _get_bot_username() -> str:
 )
 @limiter.limit(settings.rate_limit_public)
 def create_channel(
+    request: Request,
     payload: ChannelCreateRequest,
     db: Session = Depends(get_db),
 ):
@@ -240,6 +241,7 @@ def create_channel(
 )
 @limiter.limit(settings.rate_limit_public)
 def confirm_channel(
+    request: Request,
     payload: ChannelConfirmRequest,
     db: Session = Depends(get_db),
 ):

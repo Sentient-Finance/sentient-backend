@@ -20,6 +20,8 @@ services:
       resources:
         limits:
           memory: 512M
+    networks:
+      - sentient-dev
 
   redis:
     container_name: sentient-redis
@@ -38,6 +40,99 @@ services:
       resources:
         limits:
           memory: 256M
+    networks:
+      - sentient-dev
+
+  api:
+    container_name: sentient-api
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      - POSTGRES_HOST=postgres
+      - REDIS_URL=redis://redis:6379/0
+    command: ["sh", "-c", "python -m alembic upgrade head && uvicorn apps.api.app.main:app --host 0.0.0.0 --port 8000"]
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - sentient-dev
+
+  worker:
+    container_name: sentient-worker
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      - POSTGRES_HOST=postgres
+      - REDIS_URL=redis://redis:6379/0
+    command: python -m celery -A apps.worker.celery_app worker --pool=prefork -l info -Q celery
+    healthcheck:
+      test: ["CMD-SHELL", "python -m celery -A apps.worker.celery_app inspect ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - sentient-dev
+
+  worker-exec:
+    container_name: sentient-worker-exec
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      - POSTGRES_HOST=postgres
+      - REDIS_URL=redis://redis:6379/0
+    command: python -m celery -A apps.worker.celery_app worker --pool=prefork -l info -Q execution --concurrency=1
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+    healthcheck:
+      test: ["CMD-SHELL", "python -m celery -A apps.worker.celery_app inspect ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - sentient-dev
+
+  beat:
+    container_name: sentient-beat
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: .env
+    command: python -m celery -A apps.worker.celery_app beat -l info
+    depends_on:
+      redis:
+        condition: service_healthy
+      worker:
+        condition: service_started
+    networks:
+      - sentient-dev
 
   prometheus:
     container_name: sentient-prometheus
@@ -57,6 +152,8 @@ services:
       resources:
         limits:
           memory: 512M
+    networks:
+      - sentient-dev
 
   grafana:
     container_name: sentient-grafana
@@ -74,6 +171,8 @@ services:
       resources:
         limits:
           memory: 256M
+    networks:
+      - sentient-dev
 
   loki:
     container_name: sentient-loki
@@ -89,6 +188,8 @@ services:
       resources:
         limits:
           memory: 256M
+    networks:
+      - sentient-dev
 
   promtail:
     container_name: sentient-promtail
@@ -102,6 +203,8 @@ services:
     command: -config.file=/etc/promtail/config.yml
     depends_on:
       - loki
+    networks:
+      - sentient-dev
 
   cadvisor:
     container_name: sentient-cadvisor
@@ -116,60 +219,26 @@ services:
     devices:
       - /dev/kmsg
     privileged: true
+    networks:
+      - sentient-dev
 
   portainer:
     container_name: sentient-portainer
     image: portainer/portainer-ce:latest
-    networks:
-      - sentient-proxy
-      - default
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.portainer.rule=Host(`admin.${DOMAIN}`)"
-      - "traefik.http.routers.portainer.entrypoints=websecure"
-      - "traefik.http.routers.portainer.tls.certresolver=myresolver"
-      - "traefik.http.routers.portainer.middlewares=portainer-auth"
-      - "traefik.http.services.portainer.loadbalancer.server.port=9000"
-      - "traefik.http.middlewares.portainer-auth.basicauth.usersfile=/letsencrypt/htpasswd"
     volumes:
       - portainer_data:/data
     restart: unless-stopped
-    # Portainer accessible only via Traefik with Basic Auth — do NOT expose directly
-    # Note: /var/run/docker.sock mount removed — Portainer can use host Docker API
-    # via the host network mode or a separate docker socket if truly needed.
-    # Exposing the socket publicly via Traefik is a container-escape risk.
-
-  traefik:
-    image: traefik:v3.0
-    restart: unless-stopped
-    command:
-      - "--api.insecure=false"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.websecure.address=:443"
-      - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
-      - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
-      - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL}"
-      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
-      # Redirect HTTP to HTTPS
-      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
-      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
-    environment:
-      - "DOCKER_API_VERSION=1.54"
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - "./letsencrypt/acme.json:/letsencrypt/acme.json"
-      - "./letsencrypt/htpasswd:/letsencrypt/htpasswd:ro"
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
     networks:
-      - sentient-proxy
+      - sentient-dev
 
 networks:
-  sentient-proxy:
-    external: true
-  default:
-    name: sentient-internal
-    external: false
+  sentient-dev:
+    driver: bridge
+
+volumes:
+  pgdata:
+  redisdata:
+  prometheus_data:
+  grafana_data:
+  loki_data:
+  portainer_data:
